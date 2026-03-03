@@ -5,7 +5,12 @@ import { useAppStore } from './stores/appStore'
 import { useAuthStore } from './stores/authStore'
 import { TopBar } from './components/TopBar'
 import { MainArea } from './components/MainArea'
+import { CommandPalette } from './components/CommandPalette'
 import { subscribeTasks, subscribeDirectories } from './lib/realtime'
+import { fetchDirectories } from './api/directories'
+import { fetchTasks } from './api/tasks'
+import { useDirectoryStore } from './stores/directoryStore'
+import { useTaskStore } from './stores/taskStore'
 import './index.css'
 
 function LoginScreen() {
@@ -71,10 +76,34 @@ function LoginScreen() {
 function AppShell() {
   const currentView = useAppStore((s) => s.currentView)
   const setCurrentView = useAppStore((s) => s.setCurrentView)
+  const commandPaletteOpen = useAppStore((s) => s.commandPaletteOpen)
+  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
+
+      if (e.key === 'k' && mod) {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+        return
+      }
+      if (e.key === 'p' && e.ctrlKey) {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+        return
+      }
+      if (e.key === '\\') {
+        const inListOrEditor = (document.activeElement as HTMLElement)?.closest?.(
+          '[data-command-palette-context]'
+        )
+        if (inListOrEditor) {
+          e.preventDefault()
+          setCommandPaletteOpen(true)
+        }
+        return
+      }
+
       if (!mod) return
       if (e.key === '1' && !e.shiftKey) {
         e.preventDefault()
@@ -99,14 +128,18 @@ function AppShell() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setCurrentView])
+  }, [setCurrentView, setCommandPaletteOpen])
 
   const goToSettings = () => setCurrentView('settings')
+  const closePalette = () => setCommandPaletteOpen(false)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <TopBar onSettingsClick={goToSettings} />
       <MainArea currentView={currentView} />
+      {commandPaletteOpen && (
+        <CommandPalette onClose={closePalette} />
+      )}
     </div>
   )
 }
@@ -158,6 +191,9 @@ export default function App() {
 }
 
 function AppShellWithRealtime({ userId }: { userId: string }) {
+  const setDirectories = useDirectoryStore((s) => s.setDirectories)
+  const setTasks = useTaskStore((s) => s.setTasks)
+
   useEffect(() => {
     const unsubTasks = subscribeTasks(userId)
     const unsubDirs = subscribeDirectories(userId)
@@ -165,5 +201,31 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
       void Promise.all([unsubTasks(), unsubDirs()]).catch(() => {})
     }
   }, [userId])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const [dirs, tasks] = await Promise.all([
+          fetchDirectories(userId),
+          fetchTasks(userId),
+        ])
+        if (!cancelled) {
+          setDirectories(dirs)
+          setTasks(tasks)
+        }
+      } catch (_) {
+        if (!cancelled) {
+          setDirectories([])
+          setTasks([])
+        }
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [userId, setDirectories, setTasks])
+
   return <AppShell />
 }

@@ -18,6 +18,10 @@ export interface AppState {
   selectedItems: string[]
   setSelectedItems: (ids: string[]) => void
 
+  /** Anchor for shift+arrow extend selection (current column). */
+  selectionAnchorId: string | null
+  setSelectionAnchorId: (id: string | null) => void
+
   /** Focused item id (single). */
   focusedItemId: string | null
   setFocusedItemId: (id: string | null) => void
@@ -31,6 +35,10 @@ export interface AppState {
   setShowCompleted: (show: boolean) => void
   colorMode: 'none' | 'category' | 'priority'
   setColorMode: (mode: 'none' | 'category' | 'priority') => void
+
+  /** Command palette open state (Cmd+K or \). */
+  commandPaletteOpen: boolean
+  setCommandPaletteOpen: (open: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -43,6 +51,9 @@ export const useAppStore = create<AppState>((set) => ({
   selectedItems: [],
   setSelectedItems: (selectedItems) => set({ selectedItems }),
 
+  selectionAnchorId: null,
+  setSelectionAnchorId: (selectionAnchorId) => set({ selectionAnchorId }),
+
   focusedItemId: null,
   setFocusedItemId: (focusedItemId) => set({ focusedItemId }),
 
@@ -53,4 +64,7 @@ export const useAppStore = create<AppState>((set) => ({
   setShowCompleted: (showCompleted) => set({ showCompleted }),
   colorMode: 'none',
   setColorMode: (colorMode) => set({ colorMode }),
+
+  commandPaletteOpen: false,
+  setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
 }))

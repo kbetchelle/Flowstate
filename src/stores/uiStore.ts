@@ -19,6 +19,10 @@ export interface UIState {
   setDragging: (v: boolean) => void
   dragSourceId: string | null
   setDragSourceId: (id: string | null) => void
+
+  /** After palette "New task/directory", focus this id for inline naming. */
+  namingNewItemId: string | null
+  setNamingNewItemId: (id: string | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -32,4 +36,7 @@ export const useUIStore = create<UIState>((set) => ({
   setDragging: (isDragging) => set({ isDragging }),
   dragSourceId: null,
   setDragSourceId: (dragSourceId) => set({ dragSourceId }),
+
+  namingNewItemId: null,
+  setNamingNewItemId: (namingNewItemId) => set({ namingNewItemId }),
 }))
