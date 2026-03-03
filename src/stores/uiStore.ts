@@ -27,6 +27,13 @@ export interface UIState {
   /** Pending delete confirmation (Phase 9). Enter = confirm, Escape = cancel. */
   pendingDeleteIds: string[] | null
   setPendingDeleteIds: (ids: string[] | null) => void
+
+  /** Grab mode (Ctrl+Space then G): move selection with arrows, Enter to drop, Escape to cancel. */
+  grabModeActive: boolean
+  setGrabModeActive: (v: boolean) => void
+  /** Drop target item id when in grab mode (where selection will be moved). */
+  grabDropTargetId: string | null
+  setGrabDropTargetId: (id: string | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -46,4 +53,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   pendingDeleteIds: null,
   setPendingDeleteIds: (pendingDeleteIds) => set({ pendingDeleteIds }),
+
+  grabModeActive: false,
+  setGrabModeActive: (grabModeActive) => set({ grabModeActive }),
+  grabDropTargetId: null,
+  setGrabDropTargetId: (grabDropTargetId) => set({ grabDropTargetId }),
 }))

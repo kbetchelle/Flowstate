@@ -10,8 +10,9 @@ import { useTaskStore } from '../stores/taskStore'
 import { useAuthStore } from '../stores/authStore'
 import { useUIStore } from '../stores/uiStore'
 import { useViewStore } from '../stores/viewStore'
-import { updateTask } from '../api/tasks'
-import { updateDirectory } from '../api/directories'
+import { findConflictingFields } from '../api/conflictResolution'
+import { useConflictStore } from '../stores/conflictStore'
+import { runOrEnqueueTaskUpdate, runOrEnqueueDirectoryUpdate } from '../lib/offlineQueue'
 import { ColumnList, type ColumnItem } from './ColumnList'
 import { CalendarColumn } from './CalendarColumn'
 import { KanbanColumn } from './KanbanColumn'
@@ -53,6 +54,7 @@ export function ColumnView() {
   const userId = useAuthStore((s) => s.user?.id)
   const namingNewItemId = useUIStore((s) => s.namingNewItemId)
   const setNamingNewItemId = useUIStore((s) => s.setNamingNewItemId)
+  const openConflict = useConflictStore((s) => s.openConflict)
 
   const columnIds: (string | null)[] = [null, ...navigationPath]
   const columnCount = columnIds.length
@@ -143,13 +145,27 @@ export function ColumnView() {
     const task = tasks.find((t) => t.id === taskId)
     if (task) {
       const previous = { ...task }
-      updateTask(userId, task.id, {
-        ...task,
-        is_completed: !task.is_completed,
-        version: task.version,
-      }).then((next) => {
-        recordAction(userId, 'task_update', { taskId: task.id, previous, next })
-        upsertTask(next)
+      const patch = { ...task, is_completed: !task.is_completed, version: task.version }
+      const localEntity = { ...task, is_completed: !task.is_completed }
+      runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity).then((result) => {
+        if ('queued' in result && result.queued) {
+          upsertTask(localEntity)
+        } else if ('ok' in result && result.ok) {
+          recordAction(userId, 'task_update', { taskId: task.id, previous, next: result.task })
+          upsertTask(result.task)
+        } else {
+          const r = result as { ok: false; serverVersion: number; serverTask: Task }
+          const conflictingFields = findConflictingFields(localEntity, r.serverTask)
+          openConflict({
+            entityType: 'task',
+            entityId: task.id,
+            localVersion: patch.version,
+            serverVersion: r.serverVersion,
+            conflictingFields,
+            localEntity,
+            serverEntity: r.serverTask,
+          })
+        }
       })
     }
   }
@@ -159,12 +175,94 @@ export function ColumnView() {
     const task = tasks.find((t) => t.id === taskId)
     if (task) {
       const previous = { ...task }
-      updateTask(userId, task.id, { ...task, title, version: task.version }).then((next) => {
-        recordAction(userId, 'task_update', { taskId: task.id, previous, next })
-        upsertTask(next)
+      const patch = { ...task, title, version: task.version }
+      const localEntity = { ...task, title }
+      runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity).then((result) => {
+        if ('queued' in result && result.queued) {
+          upsertTask(localEntity)
+        } else if ('ok' in result && result.ok) {
+          recordAction(userId, 'task_update', { taskId: task.id, previous, next: result.task })
+          upsertTask(result.task)
+        } else {
+          const r = result as { ok: false; serverVersion: number; serverTask: Task }
+          const conflictingFields = findConflictingFields(localEntity, r.serverTask)
+          openConflict({
+            entityType: 'task',
+            entityId: task.id,
+            localVersion: patch.version,
+            serverVersion: r.serverVersion,
+            conflictingFields,
+            localEntity,
+            serverEntity: r.serverTask,
+          })
+        }
       })
     }
     setNamingNewItemId(null)
+  }
+
+  const handleMoveItem = (
+    sourceId: string,
+    sourceType: 'task' | 'directory',
+    targetDirectoryId: string | null,
+    _insertAfterItemId: string | null
+  ) => {
+    if (!userId) return
+    const tasks = useTaskStore.getState().tasks
+    const directories = useDirectoryStore.getState().directories
+    const targetTasks = tasks.filter((t) => t.directory_id === targetDirectoryId && !t.archived_at)
+    const targetDirs = directories.filter((d) => d.parent_id === targetDirectoryId)
+    const maxTaskPos = targetTasks.length === 0 ? -1 : Math.max(...targetTasks.map((t) => t.position))
+    const maxDirPos = targetDirs.length === 0 ? -1 : Math.max(...targetDirs.map((d) => d.position))
+    if (sourceType === 'task') {
+      const task = tasks.find((t) => t.id === sourceId)
+      if (task) {
+        const newPos = maxTaskPos + 1
+        const patch = { ...task, directory_id: targetDirectoryId, position: newPos, version: task.version }
+        const localEntity = { ...task, directory_id: targetDirectoryId, position: newPos }
+        runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity).then((result) => {
+          if ('queued' in result && result.queued) upsertTask(localEntity)
+          else if ('ok' in result && result.ok) upsertTask(result.task)
+          else {
+            const r = result as { ok: false; serverVersion: number; serverTask: Task }
+            openConflict({
+              entityType: 'task',
+              entityId: task.id,
+              localVersion: patch.version,
+              serverVersion: r.serverVersion,
+              conflictingFields: findConflictingFields(localEntity, r.serverTask),
+              localEntity,
+              serverEntity: r.serverTask,
+            })
+          }
+        })
+      }
+    } else {
+      const dir = directories.find((d) => d.id === sourceId)
+      if (dir) {
+        const parent = targetDirectoryId ? directories.find((d) => d.id === targetDirectoryId) : null
+        const newPos = maxDirPos + 1
+        const depthLevel = parent ? parent.depth_level + 1 : 0
+        const patch = { ...dir, parent_id: targetDirectoryId, position: newPos, depth_level: depthLevel, version: dir.version }
+        const localEntity = { ...dir, parent_id: targetDirectoryId, position: newPos, depth_level: depthLevel }
+        runOrEnqueueDirectoryUpdate(userId, dir.id, patch, localEntity).then((result) => {
+          if ('queued' in result && result.queued) upsertDirectory(localEntity)
+          else if ('ok' in result && result.ok) upsertDirectory(result.directory)
+          else {
+            const r = result as { ok: false; serverVersion: number; serverDirectory: import('../types').Directory }
+            openConflict({
+              entityType: 'directory',
+              entityId: dir.id,
+              localVersion: dir.version,
+              serverVersion: r.serverVersion,
+              conflictingFields: findConflictingFields(localEntity, r.serverDirectory),
+              localEntity,
+              serverEntity: r.serverDirectory,
+            })
+          }
+        })
+      }
+    }
   }
 
   const handleSaveDirectoryName = (directoryId: string, name: string) => {
@@ -172,9 +270,27 @@ export function ColumnView() {
     const dir = directories.find((d) => d.id === directoryId)
     if (dir) {
       const previous = { ...dir }
-      updateDirectory(userId, dir.id, { ...dir, name, version: dir.version }).then((next) => {
-        recordAction(userId, 'directory_update', { directoryId: dir.id, previous, next })
-        upsertDirectory(next)
+      const patch = { ...dir, name, version: dir.version }
+      const localEntity = { ...dir, name }
+      runOrEnqueueDirectoryUpdate(userId, dir.id, patch, localEntity).then((result) => {
+        if ('queued' in result && result.queued) {
+          upsertDirectory(localEntity)
+        } else if ('ok' in result && result.ok) {
+          recordAction(userId, 'directory_update', { directoryId: dir.id, previous, next: result.directory })
+          upsertDirectory(result.directory)
+        } else {
+          const r = result as { ok: false; serverVersion: number; serverDirectory: import('../types').Directory }
+          const conflictingFields = findConflictingFields(localEntity, r.serverDirectory)
+          openConflict({
+            entityType: 'directory',
+            entityId: dir.id,
+            localVersion: dir.version,
+            serverVersion: r.serverVersion,
+            conflictingFields,
+            localEntity,
+            serverEntity: r.serverDirectory,
+          })
+        }
       })
     }
     setNamingNewItemId(null)
@@ -255,6 +371,7 @@ export function ColumnView() {
             onSaveTaskName={handleSaveTaskName}
             onSaveDirectoryName={handleSaveDirectoryName}
             onClearNamingNewItemId={() => setNamingNewItemId(null)}
+            onMoveItem={handleMoveItem}
           />
         )
       })}

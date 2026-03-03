@@ -4,6 +4,8 @@
  */
 
 import { create } from 'zustand'
+import type { Task } from '../types'
+import type { Directory } from '../types'
 
 export type ConflictEntity = 'task' | 'directory'
 
@@ -16,14 +18,22 @@ export interface ConflictState {
   serverVersion: number | null
   /** Field-level diffs for merge UI. */
   conflictingFields: Record<string, { local: unknown; server: unknown }>
+  /** Full entities for resolveWithVersion and retry save. */
+  localEntity: Task | Directory | null
+  serverEntity: Task | Directory | null
   open: boolean
+  /** Called after user resolves and save succeeds (e.g. to process next offline queue item). */
+  onAfterResolved: (() => void) | null
   openConflict: (payload: {
     entityType: ConflictEntity
     entityId: string
     localVersion: number
     serverVersion: number
     conflictingFields: Record<string, { local: unknown; server: unknown }>
+    localEntity: Task | Directory
+    serverEntity: Task | Directory
   }) => void
+  setOnAfterResolved: (cb: (() => void) | null) => void
   closeConflict: () => void
 }
 
@@ -33,14 +43,28 @@ export const useConflictStore = create<ConflictState>((set) => ({
   localVersion: null,
   serverVersion: null,
   conflictingFields: {},
+  localEntity: null,
+  serverEntity: null,
   open: false,
-  openConflict: ({ entityType, entityId, localVersion, serverVersion, conflictingFields }) =>
+  onAfterResolved: null,
+  setOnAfterResolved: (onAfterResolved) => set({ onAfterResolved }),
+  openConflict: ({
+    entityType,
+    entityId,
+    localVersion,
+    serverVersion,
+    conflictingFields,
+    localEntity,
+    serverEntity,
+  }) =>
     set({
       entityType,
       entityId,
       localVersion,
       serverVersion,
       conflictingFields,
+      localEntity,
+      serverEntity,
       open: true,
     }),
   closeConflict: () =>
@@ -50,6 +74,9 @@ export const useConflictStore = create<ConflictState>((set) => ({
       localVersion: null,
       serverVersion: null,
       conflictingFields: {},
+      localEntity: null,
+      serverEntity: null,
       open: false,
+      onAfterResolved: null,
     }),
 }))

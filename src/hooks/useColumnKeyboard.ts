@@ -9,8 +9,11 @@ import { useAuthStore } from '../stores/authStore'
 import { useTaskStore } from '../stores/taskStore'
 import { useDirectoryStore } from '../stores/directoryStore'
 import { useUIStore } from '../stores/uiStore'
-import { updateTask, insertTask } from '../api/tasks'
+import { insertTask } from '../api/tasks'
 import { insertDirectory } from '../api/directories'
+import { runOrEnqueueTaskUpdate, runOrEnqueueDirectoryUpdate } from '../lib/offlineQueue'
+import { findConflictingFields } from '../api/conflictResolution'
+import { useConflictStore } from '../stores/conflictStore'
 import { copySelection, cutSelection, copyRecursive, paste } from '../lib/clipboard'
 import { recordAction } from '../lib/undo'
 import type { ColumnItem } from '../components/ColumnList'
@@ -37,8 +40,15 @@ export function useColumnKeyboard(
   const upsertDirectory = useDirectoryStore((s) => s.upsertDirectory)
   const setNamingNewItemId = useUIStore((s) => s.setNamingNewItemId)
   const setPendingDeleteIds = useUIStore((s) => s.setPendingDeleteIds)
+  const grabModeActive = useUIStore((s) => s.grabModeActive)
+  const setGrabModeActive = useUIStore((s) => s.setGrabModeActive)
+  const setGrabDropTargetId = useUIStore((s) => s.setGrabDropTargetId)
 
   const isInputFocused = useRef(false)
+
+  useEffect(() => {
+    if (grabModeActive) setGrabDropTargetId(focusedItemId)
+  }, [grabModeActive, focusedItemId, setGrabDropTargetId])
 
   useEffect(() => {
     const container = scrollContainerRef.current
@@ -60,6 +70,89 @@ export function useColumnKeyboard(
 
       const focusIndex = columnItems.findIndex((it) => it.id === focusedItemId)
       const mod = e.metaKey || e.ctrlKey
+
+      if (grabModeActive) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setGrabModeActive(false)
+          setGrabDropTargetId(null)
+          return
+        }
+        if (e.key === 'Enter' && userId) {
+          e.preventDefault()
+          const selectedIds = useAppStore.getState().selectedItems
+          const toMove = selectedIds.length > 0 ? selectedIds : (focusedItemId ? [focusedItemId] : [])
+          const targetDirectoryId = colIndex === 0 ? null : navigationPath[colIndex - 1] ?? null
+          const tasks = useTaskStore.getState().tasks
+          const directories = useDirectoryStore.getState().directories
+          const targetTasks = tasks.filter((t) => t.directory_id === targetDirectoryId && !t.archived_at)
+          const targetDirs = directories.filter((d) => d.parent_id === targetDirectoryId)
+          const maxTaskPos = targetTasks.length === 0 ? -1 : Math.max(...targetTasks.map((t) => t.position))
+          const maxDirPos = targetDirs.length === 0 ? -1 : Math.max(...targetDirs.map((d) => d.position))
+          let nextTaskPos = maxTaskPos + 1
+          let nextDirPos = maxDirPos + 1
+          toMove.forEach((id) => {
+            const task = tasks.find((t) => t.id === id)
+            const dir = directories.find((d) => d.id === id)
+            if (task) {
+              const patch = {
+                ...task,
+                directory_id: targetDirectoryId,
+                position: nextTaskPos++,
+                version: task.version,
+              }
+              const localEntity = { ...task, directory_id: targetDirectoryId, position: patch.position }
+              runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity).then((result) => {
+                if ('queued' in result && result.queued) upsertTask(localEntity)
+                else if ('ok' in result && result.ok) upsertTask(result.task)
+                else {
+                  const r = result as { ok: false; serverVersion: number; serverTask: Task }
+                  useConflictStore.getState().openConflict({
+                    entityType: 'task',
+                    entityId: task.id,
+                    localVersion: patch.version,
+                    serverVersion: r.serverVersion,
+                    conflictingFields: findConflictingFields(localEntity, r.serverTask),
+                    localEntity,
+                    serverEntity: r.serverTask,
+                  })
+                }
+              })
+            } else if (dir) {
+              const parent = targetDirectoryId ? directories.find((d) => d.id === targetDirectoryId) : null
+              const patch = {
+                ...dir,
+                parent_id: targetDirectoryId,
+                position: nextDirPos++,
+                depth_level: parent ? parent.depth_level + 1 : 0,
+                version: dir.version,
+              }
+              const localEntity = { ...dir, parent_id: targetDirectoryId, position: patch.position, depth_level: patch.depth_level }
+              runOrEnqueueDirectoryUpdate(userId, dir.id, patch, localEntity).then((result) => {
+                if ('queued' in result && result.queued) upsertDirectory(localEntity)
+                else if ('ok' in result && result.ok) upsertDirectory(result.directory)
+                else {
+                  const r = result as { ok: false; serverVersion: number; serverDirectory: import('../types').Directory }
+                  useConflictStore.getState().openConflict({
+                    entityType: 'directory',
+                    entityId: dir.id,
+                    localVersion: patch.version,
+                    serverVersion: r.serverVersion,
+                    conflictingFields: findConflictingFields(localEntity, r.serverDirectory),
+                    localEntity,
+                    serverEntity: r.serverDirectory,
+                  })
+                }
+              })
+            }
+          })
+          setGrabModeActive(false)
+          setGrabDropTargetId(null)
+          setSelectedItems([])
+          setFocusedItemId(columnItems[0]?.id ?? null)
+          return
+        }
+      }
 
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -147,11 +240,24 @@ export function useColumnKeyboard(
             const taskStore = useTaskStore.getState()
             const task = taskStore.tasks.find((t) => t.id === item.id)
             if (task) {
-              updateTask(userId, task.id, {
-                ...task,
-                is_completed: !task.is_completed,
-                version: task.version,
-              }).then(upsertTask)
+              const patch = { ...task, is_completed: !task.is_completed, version: task.version }
+              const localEntity = { ...task, is_completed: !task.is_completed }
+              runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity).then((result) => {
+                if ('queued' in result && result.queued) upsertTask(localEntity)
+                else if ('ok' in result && result.ok) upsertTask(result.task)
+                else {
+                  const r = result as { ok: false; serverVersion: number; serverTask: Task }
+                  useConflictStore.getState().openConflict({
+                    entityType: 'task',
+                    entityId: task.id,
+                    localVersion: patch.version,
+                    serverVersion: r.serverVersion,
+                    conflictingFields: findConflictingFields(localEntity, r.serverTask),
+                    localEntity,
+                    serverEntity: r.serverTask,
+                  })
+                }
+              })
             }
           }
         }
@@ -373,6 +479,9 @@ export function useColumnKeyboard(
     setSelectionAnchorId,
     setNamingNewItemId,
     setPendingDeleteIds,
+    grabModeActive,
+    setGrabModeActive,
+    setGrabDropTargetId,
     userId,
     upsertTask,
     upsertDirectory,

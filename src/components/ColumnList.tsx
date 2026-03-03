@@ -6,7 +6,21 @@
 
 import { forwardRef, useState, useRef, useEffect } from 'react'
 import { MultiLineEntry } from './MultiLineEntry'
+import { useUIStore } from '../stores/uiStore'
 import type { TaskPriority } from '../types'
+
+function DragHandleIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+      <circle cx="4" cy="3" r="1" />
+      <circle cx="8" cy="3" r="1" />
+      <circle cx="4" cy="6" r="1" />
+      <circle cx="8" cy="6" r="1" />
+      <circle cx="4" cy="9" r="1" />
+      <circle cx="8" cy="9" r="1" />
+    </svg>
+  )
+}
 
 export interface ColumnItem {
   id: string
@@ -31,6 +45,7 @@ interface ColumnListProps {
   onSaveTaskName: (taskId: string, title: string) => void
   onSaveDirectoryName: (directoryId: string, name: string) => void
   onClearNamingNewItemId: () => void
+  onMoveItem?: (sourceId: string, sourceType: 'task' | 'directory', targetDirectoryId: string | null, insertAfterItemId: string | null) => void
 }
 
 function rowColor(item: ColumnItem, colorMode: 'none' | 'category' | 'priority'): string | undefined {
@@ -62,12 +77,18 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
     onSaveTaskName,
     onSaveDirectoryName,
     onClearNamingNewItemId,
+    onMoveItem,
   },
   ref
 ) {
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null)
   const initialKeyRef = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const isDragging = useUIStore((s) => s.isDragging)
+  const setDragging = useUIStore((s) => s.setDragging)
+  const setDragSourceId = useUIStore((s) => s.setDragSourceId)
 
   const isNamingNew = (id: string) => id === namingNewItemId
   const isQuickEditing = (id: string) => id === editingItemId
@@ -146,6 +167,9 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
           const initialKey = editingItemId === item.id ? initialKeyRef.current : null
           const colorBg = rowColor(item, colorMode)
 
+          const showHandle = !editing && (hoveredRowId === item.id || isDragging)
+          const isDropTarget = dragOverItemId === item.id
+
           return (
             <div
               key={item.id}
@@ -155,6 +179,30 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
               tabIndex={editing ? -1 : isFocused ? 0 : -1}
               onClick={() => handleRowClick(item.id)}
               onKeyDown={(e) => handleKeyDownOnRow(e, item)}
+              onMouseEnter={() => setHoveredRowId(item.id)}
+              onMouseLeave={() => {
+                setHoveredRowId((prev) => (prev === item.id ? null : prev))
+                if (dragOverItemId === item.id) setDragOverItemId(null)
+              }}
+              onDragOver={(e) => {
+                if (!onMoveItem) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setDragOverItemId(item.id)
+              }}
+              onDragLeave={() => setDragOverItemId((prev) => (prev === item.id ? null : prev))}
+              onDrop={(e) => {
+                setDragOverItemId(null)
+                setDragging(false)
+                setDragSourceId(null)
+                if (!onMoveItem) return
+                e.preventDefault()
+                const sourceId = e.dataTransfer.getData('application/x-flowstate-item-id')
+                const sourceType = e.dataTransfer.getData('application/x-flowstate-item-type') as 'task' | 'directory' | ''
+                if (sourceId && (sourceType === 'task' || sourceType === 'directory')) {
+                  onMoveItem(sourceId, sourceType, directoryId, item.id)
+                }
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -166,8 +214,38 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
                 outline: 'none',
                 textDecoration: item.isCompleted ? 'line-through' : undefined,
                 color: item.isCompleted ? '#888' : undefined,
+                border: isDropTarget ? '2px dashed #1976d2' : undefined,
               }}
             >
+              {showHandle && onMoveItem ? (
+                <span
+                  draggable
+                  onDragStart={(e) => {
+                    setDragSourceId(item.id)
+                    setDragging(true)
+                    e.dataTransfer.setData('application/x-flowstate-item-id', item.id)
+                    e.dataTransfer.setData('application/x-flowstate-item-type', item.type)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragEnd={() => {
+                    setDragging(false)
+                    setDragSourceId(null)
+                  }}
+                  style={{
+                    cursor: 'grab',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: '#999',
+                    padding: 2,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="Drag to move"
+                >
+                  <DragHandleIcon />
+                </span>
+              ) : (
+                <span style={{ width: 12, flexShrink: 0 }} />
+              )}
               {editing ? (
                 <>
                   <span style={{ flexShrink: 0 }}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 import { useAppStore } from './stores/appStore'
@@ -10,11 +10,14 @@ import { MainArea } from './components/MainArea'
 import { CommandPalette } from './components/CommandPalette'
 import { FullEditPanel } from './components/FullEditPanel'
 import { ConfirmDialog } from './components/ConfirmDialog'
+import { ConflictDialog } from './components/ConflictDialog'
 import { subscribeTasks, subscribeDirectories } from './lib/realtime'
 import { fetchDirectories } from './api/directories'
 import { fetchTasks, autoArchiveCompletedOlderThan5Days } from './api/tasks'
 import { useDirectoryStore } from './stores/directoryStore'
+import { useNetworkStore } from './stores/networkStore'
 import { undo, redo } from './lib/undo'
+import { processOfflineQueue } from './lib/offlineQueue'
 import './index.css'
 
 function LoginScreen() {
@@ -84,12 +87,53 @@ function AppShell() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const setShowCompleted = useAppStore((s) => s.setShowCompleted)
   const setColorMode = useAppStore((s) => s.setColorMode)
+  const userId = useAuthStore((s) => s.user?.id)
+  const upsertTask = useTaskStore((s) => s.upsertTask)
 
   useEffect(() => {
+    if (currentView !== 'main_db' || !userId) return
+    const tasks = useTaskStore.getState().tasks
+    autoArchiveCompletedOlderThan5Days(userId, tasks).then((archived) => {
+      archived.forEach((t) => upsertTask(t))
+    })
+  }, [currentView, userId, upsertTask])
+
+  useEffect(() => {
+    const grabPendingRef = { current: false }
+    let grabTimeout: ReturnType<typeof setTimeout> | null = null
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
       const inEditor =
         (document.activeElement as HTMLElement)?.closest?.('input, textarea, [data-full-edit-panel]')
+
+      if (!inEditor && e.ctrlKey && e.key === ' ') {
+        e.preventDefault()
+        grabPendingRef.current = true
+        if (grabTimeout) clearTimeout(grabTimeout)
+        grabTimeout = setTimeout(() => {
+          grabPendingRef.current = false
+          grabTimeout = null
+        }, 1000)
+        return
+      }
+      if (grabPendingRef.current && (e.key === 'g' || e.key === 'G')) {
+        e.preventDefault()
+        grabPendingRef.current = false
+        if (grabTimeout) {
+          clearTimeout(grabTimeout)
+          grabTimeout = null
+        }
+        useUIStore.getState().setGrabModeActive(true)
+        useUIStore.getState().setGrabDropTargetId(useAppStore.getState().focusedItemId)
+        return
+      }
+      if (grabPendingRef.current) {
+        grabPendingRef.current = false
+        if (grabTimeout) {
+          clearTimeout(grabTimeout)
+          grabTimeout = null
+        }
+      }
 
       if (e.key === 'k' && mod) {
         e.preventDefault()
@@ -186,15 +230,31 @@ function AppShell() {
   const goToSettings = () => setCurrentView('settings')
   const closePalette = () => setCommandPaletteOpen(false)
 
+  const isOnline = useNetworkStore((s) => s.isOnline)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <TopBar onSettingsClick={goToSettings} />
+      {!isOnline && (
+        <div
+          role="status"
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#fff3e0',
+            color: '#e65100',
+            fontSize: 14,
+            textAlign: 'center',
+          }}
+        >
+          You're offline. Changes will sync when you're back online.
+        </div>
+      )}
       <MainArea currentView={currentView} />
       {commandPaletteOpen && (
         <CommandPalette onClose={closePalette} />
       )}
       <FullEditPanel />
       <ConfirmDialog />
+      <ConflictDialog />
     </div>
   )
 }
@@ -249,6 +309,16 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
   const setDirectories = useDirectoryStore((s) => s.setDirectories)
   const setTasks = useTaskStore((s) => s.setTasks)
   const upsertTask = useTaskStore((s) => s.upsertTask)
+  const isOnline = useNetworkStore((s) => s.isOnline)
+  const wasOfflineRef = useRef(false)
+
+  useEffect(() => {
+    if (!isOnline) wasOfflineRef.current = true
+    else if (wasOfflineRef.current) {
+      wasOfflineRef.current = false
+      void processOfflineQueue(userId)
+    }
+  }, [isOnline, userId])
 
   useEffect(() => {
     const unsubTasks = subscribeTasks(userId)

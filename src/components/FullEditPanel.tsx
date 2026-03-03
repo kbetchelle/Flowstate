@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useTaskStore } from '../stores/taskStore'
 import { useAuthStore } from '../stores/authStore'
-import { fetchTask, updateWithConflictCheck } from '../api/tasks'
+import { fetchTask } from '../api/tasks'
+import { runOrEnqueueTaskUpdate } from '../lib/offlineQueue'
 import {
   listAttachments,
   uploadAttachment,
@@ -188,21 +189,25 @@ export function FullEditPanel() {
     }
     setSaving(true)
     try {
-      const result = await updateWithConflictCheck(userId, task.id, patch)
-      if (result.ok) {
+      const localEntity = { ...task, ...form, is_completed: (form.status ?? task.status) === 'completed' } as Task
+      const result = await runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity)
+      if ('queued' in result && result.queued) {
+        upsertTask(localEntity)
+        setForm(taskToFormState(localEntity))
+      } else if ('ok' in result && result.ok) {
         upsertTask(result.task)
         setForm(taskToFormState(result.task))
       } else {
-        const conflictingFields = findConflictingFields(
-          { ...task, ...form } as Task,
-          result.serverTask
-        )
+        const r = result as { ok: false; serverVersion: number; serverTask: Task }
+        const conflictingFields = findConflictingFields(localEntity, r.serverTask)
         openConflict({
           entityType: 'task',
           entityId: task.id,
           localVersion: version,
-          serverVersion: result.serverVersion,
+          serverVersion: r.serverVersion,
           conflictingFields,
+          localEntity,
+          serverEntity: r.serverTask,
         })
       }
     } finally {

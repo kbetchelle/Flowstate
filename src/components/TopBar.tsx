@@ -3,11 +3,16 @@
  * Focusable by Tab; arrow-key focus between header controls in a later phase (spec §3 Q32).
  */
 
+import { useNetworkStore } from '../stores/networkStore'
+import { useUIStore } from '../stores/uiStore'
+
 interface TopBarProps {
   onSettingsClick?: () => void
 }
 
 export function TopBar({ onSettingsClick }: TopBarProps) {
+  const isOnline = useNetworkStore((s) => s.isOnline)
+  const grabModeActive = useUIStore((s) => s.grabModeActive)
   return (
     <header
       role="banner"
@@ -30,12 +35,17 @@ export function TopBar({ onSettingsClick }: TopBarProps) {
         Flowstate
       </h1>
       <span
-        aria-label="Connection status"
-        title="Connection status"
-        style={{ fontSize: 12, color: '#666' }}
+        aria-label={isOnline ? 'Connected' : 'Offline'}
+        title={isOnline ? 'Connected' : 'Offline'}
+        style={{ fontSize: 12, color: isOnline ? '#2e7d32' : '#c62828' }}
       >
-        ● Connected
+        ● {isOnline ? 'Connected' : 'Offline'}
       </span>
+      {grabModeActive && (
+        <span style={{ fontSize: 12, color: '#666' }}>
+          Grab mode: Arrows move drop target, Enter to drop, Esc to cancel.
+        </span>
+      )}
       <div style={{ flex: 1 }} />
       <nav aria-label="App controls" style={{ display: 'flex', gap: 8 }}>
         <button
