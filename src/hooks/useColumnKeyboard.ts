@@ -7,8 +7,12 @@ import { useEffect, useRef } from 'react'
 import { useAppStore } from '../stores/appStore'
 import { useAuthStore } from '../stores/authStore'
 import { useTaskStore } from '../stores/taskStore'
-import { updateTask } from '../api/tasks'
+import { useDirectoryStore } from '../stores/directoryStore'
+import { useUIStore } from '../stores/uiStore'
+import { updateTask, insertTask } from '../api/tasks'
+import { insertDirectory } from '../api/directories'
 import type { ColumnItem } from '../components/ColumnList'
+import type { Task } from '../types'
 
 export function useColumnKeyboard(
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
@@ -28,6 +32,8 @@ export function useColumnKeyboard(
 
   const userId = useAuthStore((s) => s.user?.id)
   const upsertTask = useTaskStore((s) => s.upsertTask)
+  const upsertDirectory = useDirectoryStore((s) => s.upsertDirectory)
+  const setNamingNewItemId = useUIStore((s) => s.setNamingNewItemId)
 
   const isInputFocused = useRef(false)
 
@@ -151,9 +157,79 @@ export function useColumnKeyboard(
 
       if (e.key === 'Escape') {
         e.preventDefault()
+        const namingNewItemId = useUIStore.getState().namingNewItemId
+        if (namingNewItemId) {
+          setNamingNewItemId(null)
+        }
         setFocusedItemId(null)
         setSelectedItems([])
         setSelectionAnchorId(null)
+        return
+      }
+
+      const creationContextActive = columnItems.length === 0
+      if (creationContextActive && !mod && (e.key === 't' || e.key === 'd')) {
+        e.preventDefault()
+        if (!userId) return
+        const currentDirectoryId = colIndex === 0 ? null : navigationPath[colIndex - 1] ?? null
+        const directories = useDirectoryStore.getState().directories
+        const parentDir = currentDirectoryId
+          ? directories.find((d) => d.id === currentDirectoryId)
+          : null
+        const depthLevel = parentDir ? parentDir.depth_level + 1 : 0
+        if (e.key === 't') {
+          const tasks = useTaskStore.getState().tasks
+          const tasksInDir = tasks.filter((t) => t.directory_id === currentDirectoryId)
+          const nextPosition =
+            tasksInDir.length === 0 ? 0 : Math.max(...tasksInDir.map((t) => t.position)) + 1
+          const task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
+            title: '',
+            directory_id: currentDirectoryId,
+            priority: 'MED',
+            start_date: null,
+            due_date: null,
+            background_color: null,
+            category: null,
+            tags: [],
+            description: '',
+            is_completed: false,
+            completed_at: null,
+            status: 'not_started',
+            archived_at: null,
+            archive_reason: null,
+            position: nextPosition,
+            recurrence_frequency: null,
+            recurrence_interval: null,
+            recurrence_end_date: null,
+            checklist_items: [],
+            estimated_duration_minutes: null,
+            actual_duration_minutes: null,
+            url: null,
+            version: 1,
+          }
+          insertTask(userId, task).then((t) => {
+            upsertTask(t)
+            setFocusedItemId(t.id)
+            setFocusedColumnIndex(colIndex)
+            setNamingNewItemId(t.id)
+          })
+        } else {
+          const dirsInParent = directories.filter((d) => d.parent_id === currentDirectoryId)
+          const nextPosition =
+            dirsInParent.length === 0 ? 0 : Math.max(...dirsInParent.map((d) => d.position)) + 1
+          insertDirectory(userId, {
+            name: '',
+            parent_id: currentDirectoryId,
+            position: nextPosition,
+            depth_level: depthLevel,
+            version: 1,
+          }).then((d) => {
+            upsertDirectory(d)
+            setFocusedItemId(d.id)
+            setFocusedColumnIndex(colIndex)
+            setNamingNewItemId(d.id)
+          })
+        }
         return
       }
 
@@ -246,7 +322,9 @@ export function useColumnKeyboard(
     setFocusedColumnIndex,
     setSelectedItems,
     setSelectionAnchorId,
+    setNamingNewItemId,
     userId,
     upsertTask,
+    upsertDirectory,
   ])
 }

@@ -3,14 +3,16 @@ import { supabase } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 import { useAppStore } from './stores/appStore'
 import { useAuthStore } from './stores/authStore'
+import { useUIStore } from './stores/uiStore'
+import { useTaskStore } from './stores/taskStore'
 import { TopBar } from './components/TopBar'
 import { MainArea } from './components/MainArea'
 import { CommandPalette } from './components/CommandPalette'
+import { FullEditPanel } from './components/FullEditPanel'
 import { subscribeTasks, subscribeDirectories } from './lib/realtime'
 import { fetchDirectories } from './api/directories'
 import { fetchTasks } from './api/tasks'
 import { useDirectoryStore } from './stores/directoryStore'
-import { useTaskStore } from './stores/taskStore'
 import './index.css'
 
 function LoginScreen() {
@@ -125,6 +127,17 @@ function AppShell() {
         setCurrentView('settings')
         return
       }
+      if (mod && e.shiftKey && e.key === 'e') {
+        if ((document.activeElement as HTMLElement)?.closest?.('[data-full-edit-panel]')) return
+        const focusedItemId = useAppStore.getState().focusedItemId
+        const tasks = useTaskStore.getState().tasks
+        const isTask = focusedItemId && tasks.some((t) => t.id === focusedItemId)
+        if (isTask) {
+          e.preventDefault()
+          useUIStore.getState().setEditPanelTaskId(focusedItemId)
+        }
+        return
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -140,6 +153,7 @@ function AppShell() {
       {commandPaletteOpen && (
         <CommandPalette onClose={closePalette} />
       )}
+      <FullEditPanel />
     </div>
   )
 }
