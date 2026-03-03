@@ -6,12 +6,15 @@
 
 import { forwardRef, useState, useRef, useEffect } from 'react'
 import { MultiLineEntry } from './MultiLineEntry'
+import type { TaskPriority } from '../types'
 
 export interface ColumnItem {
   id: string
   type: 'directory' | 'task'
   label: string
   isCompleted?: boolean
+  category?: string | null
+  priority?: TaskPriority
 }
 
 interface ColumnListProps {
@@ -22,11 +25,26 @@ interface ColumnListProps {
   namingNewItemId: string | null
   directoryId: string | null
   userId: string | null
+  colorMode: 'none' | 'category' | 'priority'
   onItemClick: (id: string) => void
   onToggleComplete: (taskId: string) => void
   onSaveTaskName: (taskId: string, title: string) => void
   onSaveDirectoryName: (directoryId: string, name: string) => void
   onClearNamingNewItemId: () => void
+}
+
+function rowColor(item: ColumnItem, colorMode: 'none' | 'category' | 'priority'): string | undefined {
+  if (colorMode === 'none' || item.type === 'directory') return undefined
+  if (colorMode === 'priority' && item.priority) {
+    if (item.priority === 'HIGH') return 'rgba(220, 53, 69, 0.2)'
+    if (item.priority === 'MED') return 'rgba(255, 193, 7, 0.25)'
+    if (item.priority === 'LOW') return 'rgba(40, 167, 69, 0.2)'
+  }
+  if (colorMode === 'category' && item.category) {
+    const hue = (item.category.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360)
+    return `hsla(${hue}, 50%, 90%, 0.9)`
+  }
+  return undefined
 }
 
 export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function ColumnList(
@@ -38,6 +56,7 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
     namingNewItemId,
     directoryId,
     userId,
+    colorMode,
     onItemClick,
     onToggleComplete: _onToggleComplete,
     onSaveTaskName,
@@ -125,6 +144,7 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
           const isSelected = selectedIds.includes(item.id)
           const editing = isInlineEditing(item.id)
           const initialKey = editingItemId === item.id ? initialKeyRef.current : null
+          const colorBg = rowColor(item, colorMode)
 
           return (
             <div
@@ -142,7 +162,7 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
                 padding: '8px 10px',
                 cursor: 'pointer',
                 borderRadius: 4,
-                backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : isFocused ? 'rgba(0,0,0,0.04)' : undefined,
+                backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : isFocused ? 'rgba(0,0,0,0.04)' : colorBg,
                 outline: 'none',
                 textDecoration: item.isCompleted ? 'line-through' : undefined,
                 color: item.isCompleted ? '#888' : undefined,

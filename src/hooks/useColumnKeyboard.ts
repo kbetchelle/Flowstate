@@ -11,6 +11,8 @@ import { useDirectoryStore } from '../stores/directoryStore'
 import { useUIStore } from '../stores/uiStore'
 import { updateTask, insertTask } from '../api/tasks'
 import { insertDirectory } from '../api/directories'
+import { copySelection, cutSelection, copyRecursive, paste } from '../lib/clipboard'
+import { recordAction } from '../lib/undo'
 import type { ColumnItem } from '../components/ColumnList'
 import type { Task } from '../types'
 
@@ -34,6 +36,7 @@ export function useColumnKeyboard(
   const upsertTask = useTaskStore((s) => s.upsertTask)
   const upsertDirectory = useDirectoryStore((s) => s.upsertDirectory)
   const setNamingNewItemId = useUIStore((s) => s.setNamingNewItemId)
+  const setPendingDeleteIds = useUIStore((s) => s.setPendingDeleteIds)
 
   const isInputFocused = useRef(false)
 
@@ -209,6 +212,7 @@ export function useColumnKeyboard(
           }
           insertTask(userId, task).then((t) => {
             upsertTask(t)
+            recordAction(userId, 'task_create', { task: t })
             setFocusedItemId(t.id)
             setFocusedColumnIndex(colIndex)
             setNamingNewItemId(t.id)
@@ -225,11 +229,56 @@ export function useColumnKeyboard(
             version: 1,
           }).then((d) => {
             upsertDirectory(d)
+            recordAction(userId, 'directory_create', { directory: d })
             setFocusedItemId(d.id)
             setFocusedColumnIndex(colIndex)
             setNamingNewItemId(d.id)
           })
         }
+        return
+      }
+
+      if (mod && e.shiftKey && e.key === 'c') {
+        e.preventDefault()
+        if (copyRecursive()) {
+          setSelectionAnchorId(null)
+        }
+        return
+      }
+      if (mod && e.key === 'c') {
+        e.preventDefault()
+        if (copySelection()) {
+          setSelectionAnchorId(null)
+        }
+        return
+      }
+      if (mod && e.key === 'x') {
+        e.preventDefault()
+        if (cutSelection()) {
+          setSelectionAnchorId(null)
+        }
+        return
+      }
+      if (mod && e.key === 'v') {
+        e.preventDefault()
+        if (!userId) return
+        const targetDirectoryId = colIndex === 0 ? null : navigationPath[colIndex - 1] ?? null
+        paste(userId, targetDirectoryId).then(({ newTaskIds, newDirectoryIds }) => {
+          const newIds = [...newDirectoryIds, ...newTaskIds]
+          if (newIds.length > 0) {
+            setFocusedItemId(newIds[0])
+            setSelectedItems(newIds)
+          }
+        })
+        return
+      }
+
+      if ((mod && e.key === 'Delete') || (mod && e.key === 'Backspace')) {
+        e.preventDefault()
+        const selected = useAppStore.getState().selectedItems
+        const focused = useAppStore.getState().focusedItemId
+        const ids = selected.length > 0 ? selected : (focused ? [focused] : [])
+        if (ids.length > 0) setPendingDeleteIds(ids)
         return
       }
 
@@ -323,6 +372,7 @@ export function useColumnKeyboard(
     setSelectedItems,
     setSelectionAnchorId,
     setNamingNewItemId,
+    setPendingDeleteIds,
     userId,
     upsertTask,
     upsertDirectory,

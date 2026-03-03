@@ -9,10 +9,12 @@ import { TopBar } from './components/TopBar'
 import { MainArea } from './components/MainArea'
 import { CommandPalette } from './components/CommandPalette'
 import { FullEditPanel } from './components/FullEditPanel'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { subscribeTasks, subscribeDirectories } from './lib/realtime'
 import { fetchDirectories } from './api/directories'
-import { fetchTasks } from './api/tasks'
+import { fetchTasks, autoArchiveCompletedOlderThan5Days } from './api/tasks'
 import { useDirectoryStore } from './stores/directoryStore'
+import { undo, redo } from './lib/undo'
 import './index.css'
 
 function LoginScreen() {
@@ -80,10 +82,14 @@ function AppShell() {
   const setCurrentView = useAppStore((s) => s.setCurrentView)
   const commandPaletteOpen = useAppStore((s) => s.commandPaletteOpen)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
+  const setShowCompleted = useAppStore((s) => s.setShowCompleted)
+  const setColorMode = useAppStore((s) => s.setColorMode)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
+      const inEditor =
+        (document.activeElement as HTMLElement)?.closest?.('input, textarea, [data-full-edit-panel]')
 
       if (e.key === 'k' && mod) {
         e.preventDefault()
@@ -128,7 +134,7 @@ function AppShell() {
         return
       }
       if (mod && e.shiftKey && e.key === 'e') {
-        if ((document.activeElement as HTMLElement)?.closest?.('[data-full-edit-panel]')) return
+        if (inEditor) return
         const focusedItemId = useAppStore.getState().focusedItemId
         const tasks = useTaskStore.getState().tasks
         const isTask = focusedItemId && tasks.some((t) => t.id === focusedItemId)
@@ -138,10 +144,44 @@ function AppShell() {
         }
         return
       }
+      if (!inEditor && mod && e.altKey) {
+        if (e.key === 'n') {
+          e.preventDefault()
+          setColorMode('none')
+          return
+        }
+        if (e.key === 'c') {
+          e.preventDefault()
+          setColorMode('category')
+          return
+        }
+        if (e.key === 'p') {
+          e.preventDefault()
+          setColorMode('priority')
+          return
+        }
+      }
+      if (!inEditor && mod && e.shiftKey && e.key === 'h') {
+        e.preventDefault()
+        setShowCompleted(!useAppStore.getState().showCompleted)
+        return
+      }
+      if (!inEditor && mod && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        const userId = useAuthStore.getState().user?.id
+        if (userId) void undo(userId)
+        return
+      }
+      if (!inEditor && mod && e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        const userId = useAuthStore.getState().user?.id
+        if (userId) void redo(userId)
+        return
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setCurrentView, setCommandPaletteOpen])
+  }, [setCurrentView, setCommandPaletteOpen, setShowCompleted, setColorMode])
 
   const goToSettings = () => setCurrentView('settings')
   const closePalette = () => setCommandPaletteOpen(false)
@@ -154,6 +194,7 @@ function AppShell() {
         <CommandPalette onClose={closePalette} />
       )}
       <FullEditPanel />
+      <ConfirmDialog />
     </div>
   )
 }
@@ -207,6 +248,7 @@ export default function App() {
 function AppShellWithRealtime({ userId }: { userId: string }) {
   const setDirectories = useDirectoryStore((s) => s.setDirectories)
   const setTasks = useTaskStore((s) => s.setTasks)
+  const upsertTask = useTaskStore((s) => s.upsertTask)
 
   useEffect(() => {
     const unsubTasks = subscribeTasks(userId)
@@ -227,6 +269,8 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
         if (!cancelled) {
           setDirectories(dirs)
           setTasks(tasks)
+          const archived = await autoArchiveCompletedOlderThan5Days(userId, tasks)
+          if (!cancelled) archived.forEach((t) => upsertTask(t))
         }
       } catch (_) {
         if (!cancelled) {
@@ -239,7 +283,7 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
     return () => {
       cancelled = true
     }
-  }, [userId, setDirectories, setTasks])
+  }, [userId, setDirectories, setTasks, upsertTask])
 
   return <AppShell />
 }

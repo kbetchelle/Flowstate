@@ -121,6 +121,36 @@ export async function unarchiveTask(userId: string, id: string): Promise<Task> {
   return parseTask(data as TaskRow)
 }
 
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
+
+/**
+ * Archive completed tasks older than 5 days (spec §4 Q55).
+ * Call after loading tasks; returns updated tasks to upsert into store.
+ */
+export async function autoArchiveCompletedOlderThan5Days(
+  userId: string,
+  tasks: Task[]
+): Promise<Task[]> {
+  const cutoff = new Date(Date.now() - FIVE_DAYS_MS).toISOString()
+  const toArchive = tasks.filter(
+    (t) =>
+      t.is_completed &&
+      t.completed_at != null &&
+      t.completed_at < cutoff &&
+      t.archived_at == null
+  )
+  const updated: Task[] = []
+  for (const t of toArchive) {
+    try {
+      const archived = await archiveTask(userId, t.id, 'auto')
+      updated.push(archived)
+    } catch {
+      // ignore per-task errors
+    }
+  }
+  return updated
+}
+
 /** Fetch current version of a task. */
 export async function fetchTask(
   userId: string,

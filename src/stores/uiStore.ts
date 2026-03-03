@@ -23,6 +23,10 @@ export interface UIState {
   /** After palette "New task/directory", focus this id for inline naming. */
   namingNewItemId: string | null
   setNamingNewItemId: (id: string | null) => void
+
+  /** Pending delete confirmation (Phase 9). Enter = confirm, Escape = cancel. */
+  pendingDeleteIds: string[] | null
+  setPendingDeleteIds: (ids: string[] | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -39,4 +43,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   namingNewItemId: null,
   setNamingNewItemId: (namingNewItemId) => set({ namingNewItemId }),
+
+  pendingDeleteIds: null,
+  setPendingDeleteIds: (pendingDeleteIds) => set({ pendingDeleteIds }),
 }))

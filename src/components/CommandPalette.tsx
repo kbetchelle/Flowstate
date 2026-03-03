@@ -12,6 +12,7 @@ import { useDirectoryStore } from '../stores/directoryStore'
 import { useUIStore } from '../stores/uiStore'
 import { insertTask } from '../api/tasks'
 import { insertDirectory } from '../api/directories'
+import { recordAction } from '../lib/undo'
 import type { Task } from '../types'
 
 export interface CommandItem {
@@ -92,6 +93,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           }
           insertTask(userId, task).then((t) => {
             upsertTask(t)
+            recordAction(userId, 'task_create', { task: t })
             setFocusedItemId(t.id)
             setFocusedColumnIndex(navigationPath.length)
             setNamingNewItemId(t.id)
@@ -113,6 +115,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             version: 1,
           }).then((d) => {
             upsertDirectory(d)
+            recordAction(userId, 'directory_create', { directory: d })
             setFocusedItemId(d.id)
             setFocusedColumnIndex(navigationPath.length)
             setNamingNewItemId(d.id)
