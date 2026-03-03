@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
+import { useAppStore } from './stores/appStore'
+import { useAuthStore } from './stores/authStore'
+import { TopBar } from './components/TopBar'
+import { MainArea } from './components/MainArea'
+import { subscribeTasks, subscribeDirectories } from './lib/realtime'
 import './index.css'
 
 function LoginScreen() {
@@ -64,10 +69,44 @@ function LoginScreen() {
 }
 
 function AppShell() {
+  const currentView = useAppStore((s) => s.currentView)
+  const setCurrentView = useAppStore((s) => s.setCurrentView)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      if (e.key === '1' && !e.shiftKey) {
+        e.preventDefault()
+        setCurrentView('main_db')
+        return
+      }
+      if (e.key === 'l' && e.shiftKey) {
+        e.preventDefault()
+        setCurrentView('upcoming')
+        return
+      }
+      if (e.key === 'a' && e.shiftKey) {
+        e.preventDefault()
+        setCurrentView('archive')
+        return
+      }
+      if (e.key === ',') {
+        e.preventDefault()
+        setCurrentView('settings')
+        return
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setCurrentView])
+
+  const goToSettings = () => setCurrentView('settings')
+
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Flowstate</h1>
-      <p>You are logged in. App shell placeholder.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <TopBar onSettingsClick={goToSettings} />
+      <MainArea currentView={currentView} />
     </div>
   )
 }
@@ -75,6 +114,7 @@ function AppShell() {
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const setAuthSession = useAuthStore((s) => s.setSession)
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -88,6 +128,7 @@ export default function App() {
       }
       const { data: { session: s } } = await supabase.auth.getSession()
       setSession(s)
+      setAuthSession(s)
       setLoading(false)
     }
 
@@ -95,10 +136,11 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s)
+      setAuthSession(s)
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [setAuthSession])
 
   if (loading) {
     return (
@@ -112,5 +154,16 @@ export default function App() {
     return <LoginScreen />
   }
 
+  return <AppShellWithRealtime userId={session.user.id} />
+}
+
+function AppShellWithRealtime({ userId }: { userId: string }) {
+  useEffect(() => {
+    const unsubTasks = subscribeTasks(userId)
+    const unsubDirs = subscribeDirectories(userId)
+    return () => {
+      void Promise.all([unsubTasks(), unsubDirs()]).catch(() => {})
+    }
+  }, [userId])
   return <AppShell />
 }
