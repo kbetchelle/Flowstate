@@ -1,0 +1,8 @@
+{
+  "name": "Flowstate",
+  "short_name": "Flowstate",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1976d2",
+  "background_color": "#ffffff"
+}
