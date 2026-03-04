@@ -11,13 +11,25 @@ import { CommandPalette } from './components/CommandPalette'
 import { FullEditPanel } from './components/FullEditPanel'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ConflictDialog } from './components/ConflictDialog'
+import { OnboardingFlow } from './components/OnboardingFlow'
+import { FeedbackToast } from './components/FeedbackToast'
+import { SearchOverlay } from './components/SearchOverlay'
+import { ShortcutSheet } from './components/ShortcutSheet'
+import { HelpSheet } from './components/HelpSheet'
+import { DependencyGraphView } from './components/DependencyGraphView'
 import { subscribeTasks, subscribeDirectories } from './lib/realtime'
 import { fetchDirectories } from './api/directories'
 import { fetchTasks, autoArchiveCompletedOlderThan5Days } from './api/tasks'
+import { fetchUserSettings } from './api/userSettings'
+import { fetchLinksForUser } from './api/links'
+import { useLinkStore } from './stores/linkStore'
 import { useDirectoryStore } from './stores/directoryStore'
 import { useNetworkStore } from './stores/networkStore'
+import { useThemeStore } from './stores/themeStore'
+import { useSettingsStore } from './stores/settingsStore'
 import { undo, redo } from './lib/undo'
 import { processOfflineQueue } from './lib/offlineQueue'
+import { keyEventToCombo, getActionIdForCombo } from './constants/shortcuts'
 import './index.css'
 
 function LoginScreen() {
@@ -85,10 +97,64 @@ function AppShell() {
   const setCurrentView = useAppStore((s) => s.setCurrentView)
   const commandPaletteOpen = useAppStore((s) => s.commandPaletteOpen)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
+  const searchOverlayOpen = useAppStore((s) => s.searchOverlayOpen)
+  const setSearchOverlayOpen = useAppStore((s) => s.setSearchOverlayOpen)
+  const shortcutSheetOpen = useAppStore((s) => s.shortcutSheetOpen)
+  const setShortcutSheetOpen = useAppStore((s) => s.setShortcutSheetOpen)
+  const helpSheetOpen = useAppStore((s) => s.helpSheetOpen)
+  const setHelpSheetOpen = useAppStore((s) => s.setHelpSheetOpen)
+  const dependencyGraphOpen = useAppStore((s) => s.dependencyGraphOpen)
+  const setDependencyGraphOpen = useAppStore((s) => s.setDependencyGraphOpen)
   const setShowCompleted = useAppStore((s) => s.setShowCompleted)
   const setColorMode = useAppStore((s) => s.setColorMode)
   const userId = useAuthStore((s) => s.user?.id)
   const upsertTask = useTaskStore((s) => s.upsertTask)
+  const mode = useThemeStore((s) => s.mode)
+  const accent = useThemeStore((s) => s.accent)
+  const setMode = useThemeStore((s) => s.setMode)
+  const setAccent = useThemeStore((s) => s.setAccent)
+
+  useEffect(() => {
+    try {
+      const storedMode = localStorage.getItem('flowstate_theme_mode')
+      if (storedMode === 'light' || storedMode === 'dark' || storedMode === 'system') {
+        setMode(storedMode)
+      }
+      const storedAccent = localStorage.getItem('flowstate_theme_accent')
+      setAccent(storedAccent || null)
+    } catch (_) {}
+  }, [setMode, setAccent])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('flowstate_theme_mode', mode)
+    } catch (_) {}
+    const applyResolved = () => {
+      const resolved =
+        mode === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : mode
+      document.documentElement.setAttribute('data-theme', resolved)
+    }
+    applyResolved()
+    if (mode !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const listener = () => applyResolved()
+    mq.addEventListener('change', listener)
+    return () => mq.removeEventListener('change', listener)
+  }, [mode])
+
+  useEffect(() => {
+    try {
+      if (accent) localStorage.setItem('flowstate_theme_accent', accent)
+      else localStorage.removeItem('flowstate_theme_accent')
+    } catch (_) {}
+    if (accent) {
+      document.documentElement.style.setProperty('--accent', accent)
+    } else {
+      document.documentElement.style.removeProperty('--accent')
+    }
+  }, [accent])
 
   useEffect(() => {
     if (currentView !== 'main_db' || !userId) return
@@ -135,6 +201,49 @@ function AppShell() {
         }
       }
 
+      const combo = keyEventToCombo(e)
+      const customShortcuts = useSettingsStore.getState().settings?.custom_shortcuts ?? {}
+      const remappedActionId = getActionIdForCombo(combo, customShortcuts)
+      if (remappedActionId && !inEditor) {
+        const actions: Record<string, () => void> = {
+          'view.main': () => setCurrentView('main_db'),
+          'view.upcoming': () => setCurrentView('upcoming'),
+          'view.archive': () => setCurrentView('archive'),
+          'command.palette': () => setCommandPaletteOpen(true),
+          'search.open': () => setSearchOverlayOpen(true),
+          'view.shortcutSheet': () => setShortcutSheetOpen(true),
+          'settings.open': () => setCurrentView('settings'),
+          'view.completedToggle': () => setShowCompleted(!useAppStore.getState().showCompleted),
+          'action.undo': () => { const uid = useAuthStore.getState().user?.id; if (uid) void undo(uid) },
+          'action.redo': () => { const uid = useAuthStore.getState().user?.id; if (uid) void redo(uid) },
+          'edit.full': () => {
+            const focusedItemId = useAppStore.getState().focusedItemId
+            const tasks = useTaskStore.getState().tasks
+            if (focusedItemId && tasks.some((t) => t.id === focusedItemId)) {
+              useUIStore.getState().setEditPanelTaskId(focusedItemId)
+            }
+          },
+          'task.delete': () => {
+            const ids = useAppStore.getState().selectedItems
+            if (ids.length > 0) useUIStore.getState().setPendingDeleteIds(ids)
+          },
+          'clipboard.copy': () => { /* contextual: handled in column */ },
+          'clipboard.cut': () => { /* contextual */ },
+          'clipboard.paste': () => { /* contextual */ },
+          'clipboard.copyRecursive': () => { /* contextual */ },
+          'select.all': () => { /* contextual */ },
+          'color.none': () => setColorMode('none'),
+          'color.category': () => setColorMode('category'),
+          'color.priority': () => setColorMode('priority'),
+        }
+        const run = actions[remappedActionId]
+        if (run) {
+          e.preventDefault()
+          run()
+          return
+        }
+      }
+
       if (e.key === 'k' && mod) {
         e.preventDefault()
         setCommandPaletteOpen(true)
@@ -153,6 +262,16 @@ function AppShell() {
           e.preventDefault()
           setCommandPaletteOpen(true)
         }
+        return
+      }
+      if (!inEditor && mod && e.shiftKey && e.key === 's') {
+        e.preventDefault()
+        setSearchOverlayOpen(true)
+        return
+      }
+      if (!inEditor && mod && e.key === '/') {
+        e.preventDefault()
+        setShortcutSheetOpen(true)
         return
       }
 
@@ -225,15 +344,38 @@ function AppShell() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setCurrentView, setCommandPaletteOpen, setShowCompleted, setColorMode])
+  }, [setCurrentView, setCommandPaletteOpen, setSearchOverlayOpen, setShortcutSheetOpen, setShowCompleted, setColorMode])
 
   const goToSettings = () => setCurrentView('settings')
   const closePalette = () => setCommandPaletteOpen(false)
+  const openSearch = () => setSearchOverlayOpen(true)
+  const closeSearch = () => setSearchOverlayOpen(false)
+  const openHelp = () => setHelpSheetOpen(true)
+  const closeHelp = () => setHelpSheetOpen(false)
+  const closeShortcutSheet = () => setShortcutSheetOpen(false)
+  const closeDependencyGraph = () => setDependencyGraphOpen(false)
+
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const listener = () => setIsMobile(mq.matches)
+    mq.addEventListener('change', listener)
+    return () => mq.removeEventListener('change', listener)
+  }, [])
 
   const isOnline = useNetworkStore((s) => s.isOnline)
+  const BOTTOM_NAV_HEIGHT = 56
+  const FAB_SIZE = 56
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <TopBar onSettingsClick={goToSettings} />
+      <TopBar
+        onSettingsClick={goToSettings}
+        onSearchClick={openSearch}
+        onHelpClick={openHelp}
+      />
       {!isOnline && (
         <div
           role="status"
@@ -248,13 +390,107 @@ function AppShell() {
           You're offline. Changes will sync when you're back online.
         </div>
       )}
-      <MainArea currentView={currentView} />
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          paddingBottom: isMobile ? BOTTOM_NAV_HEIGHT : 0,
+        }}
+      >
+        <MainArea currentView={currentView} />
+      </div>
+      {isMobile && (
+        <>
+          <button
+            type="button"
+            aria-label="New task or directory"
+            onClick={() => setCommandPaletteOpen(true)}
+            style={{
+              position: 'fixed',
+              bottom: BOTTOM_NAV_HEIGHT + 16,
+              right: 16,
+              width: FAB_SIZE,
+              height: FAB_SIZE,
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: 'var(--accent, #1976d2)',
+              color: '#fff',
+              fontSize: 24,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              zIndex: 100,
+            }}
+          >
+            +
+          </button>
+          <nav
+            role="navigation"
+            aria-label="Main and Search"
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: BOTTOM_NAV_HEIGHT,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-around',
+              borderTop: '1px solid #e0e0e0',
+              backgroundColor: 'var(--bg, #fafafa)',
+              zIndex: 99,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setCurrentView('main_db')}
+              style={{
+                flex: 1,
+                padding: 12,
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontWeight: currentView === 'main_db' ? 600 : 400,
+              }}
+            >
+              Main
+            </button>
+            <button
+              type="button"
+              onClick={openSearch}
+              style={{
+                flex: 1,
+                padding: 12,
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Search
+            </button>
+          </nav>
+        </>
+      )}
       {commandPaletteOpen && (
         <CommandPalette onClose={closePalette} />
+      )}
+      {searchOverlayOpen && (
+        <SearchOverlay onClose={closeSearch} />
+      )}
+      {shortcutSheetOpen && (
+        <ShortcutSheet onClose={closeShortcutSheet} />
+      )}
+      {helpSheetOpen && (
+        <HelpSheet onClose={closeHelp} />
+      )}
+      {dependencyGraphOpen && (
+        <DependencyGraphView onClose={closeDependencyGraph} />
       )}
       <FullEditPanel />
       <ConfirmDialog />
       <ConflictDialog />
+      <OnboardingFlow />
+      <FeedbackToast />
     </div>
   )
 }
@@ -311,6 +547,10 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
   const upsertTask = useTaskStore((s) => s.upsertTask)
   const isOnline = useNetworkStore((s) => s.isOnline)
   const wasOfflineRef = useRef(false)
+  const setSettings = useSettingsStore((s) => s.setSettings)
+  const setMode = useThemeStore((s) => s.setMode)
+  const setAccent = useThemeStore((s) => s.setAccent)
+  const setLinks = useLinkStore((s) => s.setLinks)
 
   useEffect(() => {
     if (!isOnline) wasOfflineRef.current = true
@@ -332,13 +572,21 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
     let cancelled = false
     const load = async () => {
       try {
-        const [dirs, tasks] = await Promise.all([
+        const [dirs, tasks, settings, links] = await Promise.all([
           fetchDirectories(userId),
           fetchTasks(userId),
+          fetchUserSettings(userId),
+          fetchLinksForUser(userId),
         ])
         if (!cancelled) {
           setDirectories(dirs)
           setTasks(tasks)
+          setLinks(links)
+          if (settings) {
+            setSettings(settings)
+            setMode(settings.theme)
+            setAccent(settings.accent)
+          }
           const archived = await autoArchiveCompletedOlderThan5Days(userId, tasks)
           if (!cancelled) archived.forEach((t) => upsertTask(t))
         }
@@ -353,7 +601,7 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
     return () => {
       cancelled = true
     }
-  }, [userId, setDirectories, setTasks, upsertTask])
+  }, [userId, setDirectories, setTasks, setLinks, setSettings, setMode, setAccent, upsertTask])
 
   return <AppShell />
 }

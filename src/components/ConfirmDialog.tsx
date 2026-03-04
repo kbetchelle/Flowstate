@@ -2,7 +2,7 @@
  * Confirmation dialog for delete (Phase 9). Enter = confirm, Escape = cancel.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useAuthStore } from '../stores/authStore'
 import { useTaskStore } from '../stores/taskStore'
@@ -11,6 +11,7 @@ import { useAppStore } from '../stores/appStore'
 import { deleteTask } from '../api/tasks'
 import { deleteDirectory } from '../api/directories'
 import { recordAction } from '../lib/undo'
+import { useFeedbackStore } from '../stores/feedbackStore'
 
 export function ConfirmDialog() {
   const pendingDeleteIds = useUIStore((s) => s.pendingDeleteIds)
@@ -26,33 +27,53 @@ export function ConfirmDialog() {
   const open = pendingDeleteIds != null && pendingDeleteIds.length > 0
   const count = pendingDeleteIds?.length ?? 0
 
-  const handleConfirm = async () => {
+  const handleCancel = useCallback(() => {
+    setPendingDeleteIds(null)
+  }, [setPendingDeleteIds])
+
+  const handleConfirm = useCallback(async () => {
     if (!userId || !pendingDeleteIds?.length) {
       setPendingDeleteIds(null)
       return
     }
     const tasksToDelete = tasks.filter((t) => pendingDeleteIds!.includes(t.id))
     const dirsToDelete = directories.filter((d) => pendingDeleteIds!.includes(d.id))
-    await recordAction(userId, 'bulk_delete', {
-      tasks: tasksToDelete,
-      directories: dirsToDelete,
-    })
-    for (const t of tasksToDelete) {
-      await deleteTask(userId, t.id)
-      removeTask(t.id)
+    try {
+      await recordAction(userId, 'bulk_delete', {
+        tasks: tasksToDelete,
+        directories: dirsToDelete,
+      })
+      for (const t of tasksToDelete) {
+        await deleteTask(userId, t.id)
+        removeTask(t.id)
+      }
+      for (const d of dirsToDelete) {
+        await deleteDirectory(userId, d.id)
+        removeDirectory(d.id)
+      }
+      const hasTasks = tasksToDelete.length > 0
+      const hasDirs = dirsToDelete.length > 0
+      if (hasTasks && hasDirs) useFeedbackStore.getState().addToast('success', 'Items deleted')
+      else if (hasTasks) useFeedbackStore.getState().addToast('success', tasksToDelete.length === 1 ? 'Task deleted' : 'Tasks deleted')
+      else if (hasDirs) useFeedbackStore.getState().addToast('success', dirsToDelete.length === 1 ? 'Directory deleted' : 'Directories deleted')
+    } catch {
+      useFeedbackStore.getState().addToast('error', 'Delete failed')
+    } finally {
+      setFocusedItemId(null)
+      setSelectedItems([])
+      setPendingDeleteIds(null)
     }
-    for (const d of dirsToDelete) {
-      await deleteDirectory(userId, d.id)
-      removeDirectory(d.id)
-    }
-    setFocusedItemId(null)
-    setSelectedItems([])
-    setPendingDeleteIds(null)
-  }
-
-  const handleCancel = () => {
-    setPendingDeleteIds(null)
-  }
+  }, [
+    userId,
+    pendingDeleteIds,
+    tasks,
+    directories,
+    setPendingDeleteIds,
+    setFocusedItemId,
+    setSelectedItems,
+    removeTask,
+    removeDirectory,
+  ])
 
   useEffect(() => {
     if (!open) return
@@ -68,7 +89,7 @@ export function ConfirmDialog() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, handleConfirm, handleCancel])
 
   if (!open) return null
 

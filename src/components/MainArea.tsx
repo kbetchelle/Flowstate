@@ -6,6 +6,7 @@
 import type { CurrentView } from '../types'
 import { Breadcrumbs } from './Breadcrumbs'
 import { ColumnView } from './ColumnView'
+import { SettingsView } from './SettingsView'
 
 interface MainAreaProps {
   currentView: CurrentView
@@ -36,6 +37,22 @@ export function MainArea({ currentView }: MainAreaProps) {
           <Breadcrumbs />
         </div>
         <ColumnView />
+      </main>
+    )
+  }
+
+  if (currentView === 'settings') {
+    return (
+      <main
+        role="main"
+        data-command-palette-context
+        style={{
+          flex: 1,
+          padding: 24,
+          overflow: 'auto',
+        }}
+      >
+        <SettingsView />
       </main>
     )
   }

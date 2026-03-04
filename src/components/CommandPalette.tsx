@@ -185,9 +185,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         id: 'dependency-graph',
         label: 'Open Dependency Graph',
         run: () => {
+          useAppStore.getState().setDependencyGraphOpen(true)
           setCommandPaletteOpen(false)
           onClose()
-          // Placeholder: Phase 13 will implement
         },
       },
     ]

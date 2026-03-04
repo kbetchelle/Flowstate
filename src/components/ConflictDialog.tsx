@@ -10,6 +10,7 @@ import { useTaskStore } from '../stores/taskStore'
 import { useDirectoryStore } from '../stores/directoryStore'
 import { resolveWithVersion } from '../api/conflictResolution'
 import { updateWithConflictCheck } from '../api/tasks'
+import { useFeedbackStore } from '../stores/feedbackStore'
 import { updateDirectoryWithConflictCheck } from '../api/directories'
 import type { Task } from '../types'
 import type { Directory } from '../types'
@@ -112,6 +113,7 @@ export function ConflictDialog() {
         if (result.ok) {
           upsertTask(result.task)
           closeConflict()
+          useFeedbackStore.getState().addToast('success', 'Conflict resolved')
           onAfterResolved?.()
           setOnAfterResolved(null)
         } else {
@@ -139,6 +141,7 @@ export function ConflictDialog() {
         if (result.ok) {
           upsertDirectory(result.directory)
           closeConflict()
+          useFeedbackStore.getState().addToast('success', 'Conflict resolved')
           onAfterResolved?.()
           setOnAfterResolved(null)
         } else {

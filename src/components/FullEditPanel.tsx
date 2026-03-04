@@ -17,7 +17,12 @@ import {
 } from '../api/attachments'
 import { findConflictingFields } from '../api/conflictResolution'
 import { useConflictStore } from '../stores/conflictStore'
-import type { Task, TaskPriority, TaskStatus, ChecklistItem } from '../types'
+import { useLinkStore } from '../stores/linkStore'
+import { useAppStore } from '../stores/appStore'
+import { useFeedbackStore } from '../stores/feedbackStore'
+import { createLink, deleteLink } from '../api/links'
+import { wouldCreateDependencyCycle } from '../lib/dependencyCycle'
+import type { Task, TaskPriority, TaskStatus, ChecklistItem, TaskLinkType } from '../types'
 
 const PRIORITIES: TaskPriority[] = ['LOW', 'MED', 'HIGH']
 const STATUSES: TaskStatus[] = ['not_started', 'in_progress', 'finishing_touches', 'completed']
@@ -57,8 +62,15 @@ export function FullEditPanel() {
   const [attachments, setAttachments] = useState<{ name: string; path: string }[]>([])
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [addLinkTargetId, setAddLinkTargetId] = useState<string | null>(null)
+  const [addLinkType, setAddLinkType] = useState<TaskLinkType | null>(null)
+  const [addLinkError, setAddLinkError] = useState<string | null>(null)
   const openConflict = useConflictStore((s) => s.openConflict)
   const upsertTask = useTaskStore((s) => s.upsertTask)
+  const links = useLinkStore((s) => s.links)
+  const addLink = useLinkStore((s) => s.addLink)
+  const removeLink = useLinkStore((s) => s.removeLink)
+  const setDependencyGraphOpen = useAppStore((s) => s.setDependencyGraphOpen)
 
   useEffect(() => {
     if (!editPanelTaskId || !userId) return
@@ -197,6 +209,7 @@ export function FullEditPanel() {
       } else if ('ok' in result && result.ok) {
         upsertTask(result.task)
         setForm(taskToFormState(result.task))
+        useFeedbackStore.getState().addToast('success', 'Task saved')
       } else {
         const r = result as { ok: false; serverVersion: number; serverTask: Task }
         const conflictingFields = findConflictingFields(localEntity, r.serverTask)
@@ -365,13 +378,17 @@ export function FullEditPanel() {
             <div style={formStyle}>
               <label style={labelStyle}>Recurrence</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input
-                  type="text"
-                  placeholder="Frequency"
+                <select
                   value={form.recurrence_frequency ?? ''}
                   onChange={(e) => update({ recurrence_frequency: e.target.value || null })}
-                  style={{ ...inputStyle, flex: 1, minWidth: 80 }}
-                />
+                  style={{ ...inputStyle, flex: 1, minWidth: 100 }}
+                >
+                  <option value="">None</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
                 <input
                   type="number"
                   placeholder="Interval"
@@ -437,6 +454,134 @@ export function FullEditPanel() {
                   )
                 })}
               </ul>
+            </div>
+            <div style={formStyle}>
+              <label style={labelStyle}>Task links</label>
+              <p style={{ margin: '0 0 8px', fontSize: 12, color: '#666' }}>
+                <button
+                  type="button"
+                  onClick={() => setDependencyGraphOpen(true)}
+                  style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent, #1976d2)', cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}
+                >
+                  Open full Dependency Graph
+                </button>
+              </p>
+              {editPanelTaskId && (() => {
+                const taskLinks = links.filter(
+                  (l) => l.source_id === editPanelTaskId || l.target_id === editPanelTaskId
+                )
+                const otherTaskId = (link: { source_id: string; target_id: string }) =>
+                  link.source_id === editPanelTaskId ? link.target_id : link.source_id
+                return (
+                  <>
+                    <ul style={{ margin: '0 0 8px', paddingLeft: 20 }}>
+                      {taskLinks.map((link) => {
+                        const otherId = otherTaskId(link)
+                        const otherTask = tasks.find((t) => t.id === otherId)
+                        return (
+                          <li key={link.id} style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ flex: 1 }}>
+                              {otherTask?.title ?? otherId} ({link.link_type})
+                            </span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!userId) return
+                                try {
+                                  await deleteLink(userId, link.id)
+                                  removeLink(link.id)
+                                } catch (_) {}
+                              }}
+                              aria-label="Remove link"
+                              style={{ padding: '2px 8px', fontSize: 12 }}
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    {addLinkTargetId === null ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddLinkTargetId('')
+                          setAddLinkType(null)
+                          setAddLinkError(null)
+                        }}
+                        style={{ marginTop: 4 }}
+                      >
+                        Add link
+                      </button>
+                    ) : (
+                      <div style={{ marginTop: 8, padding: 8, border: '1px solid #eee', borderRadius: 4 }}>
+                        <label style={{ ...labelStyle, marginBottom: 4 }}>Task</label>
+                        <select
+                          value={addLinkTargetId}
+                          onChange={(e) => setAddLinkTargetId(e.target.value || null)}
+                          style={{ ...inputStyle, marginBottom: 8, width: '100%' }}
+                        >
+                          <option value="">Select task…</option>
+                          {tasks
+                            .filter((t) => t.id !== editPanelTaskId && !t.archived_at)
+                            .map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.title || '(No title)'}
+                              </option>
+                            ))}
+                        </select>
+                        <label style={{ ...labelStyle, marginBottom: 4 }}>Type</label>
+                        <select
+                          value={addLinkType ?? ''}
+                          onChange={(e) => setAddLinkType((e.target.value as TaskLinkType) || null)}
+                          style={{ ...inputStyle, marginBottom: 8, width: '100%' }}
+                        >
+                          <option value="">Select type…</option>
+                          <option value="reference">Reference</option>
+                          <option value="dependency">Dependency</option>
+                        </select>
+                        {addLinkError && (
+                          <p style={{ margin: '0 0 8px', color: '#c62828', fontSize: 13 }}>{addLinkError}</p>
+                        )}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!userId || !addLinkTargetId || !addLinkType) return
+                              setAddLinkError(null)
+                              if (addLinkType === 'dependency' && wouldCreateDependencyCycle(links, editPanelTaskId, addLinkTargetId)) {
+                                setAddLinkError('This would create a circular dependency.')
+                                return
+                              }
+                              try {
+                                const created = await createLink(userId, editPanelTaskId, addLinkTargetId, addLinkType)
+                                addLink(created)
+                                setAddLinkTargetId(null)
+                                setAddLinkType(null)
+                              } catch (err) {
+                                setAddLinkError(err instanceof Error ? err.message : 'Failed to add link')
+                              }
+                            }}
+                            style={{ padding: '6px 12px' }}
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddLinkTargetId(null)
+                              setAddLinkType(null)
+                              setAddLinkError(null)
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
             <div style={formStyle}>
               <label style={labelStyle}>Category</label>

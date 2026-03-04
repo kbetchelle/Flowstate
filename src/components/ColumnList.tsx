@@ -7,7 +7,14 @@
 import { forwardRef, useState, useRef, useEffect } from 'react'
 import { MultiLineEntry } from './MultiLineEntry'
 import { useUIStore } from '../stores/uiStore'
-import type { TaskPriority } from '../types'
+import type { TaskPriority, TaskStatus } from '../types'
+
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  finishing_touches: 'Finishing touches',
+  completed: 'Completed',
+}
 
 function DragHandleIcon() {
   return (
@@ -27,6 +34,7 @@ export interface ColumnItem {
   type: 'directory' | 'task'
   label: string
   isCompleted?: boolean
+  status?: TaskStatus
   category?: string | null
   priority?: TaskPriority
 }
@@ -295,9 +303,22 @@ export const ColumnList = forwardRef<HTMLDivElement, ColumnListProps>(function C
                   <span style={{ flexShrink: 0 }}>
                     {item.type === 'directory' ? '📁' : item.isCompleted ? '☑' : '☐'}
                   </span>
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                     {item.label || '(Untitled)'}
                   </span>
+                  {item.type === 'task' && item.status !== undefined && (
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        fontSize: 11,
+                        color: '#666',
+                        marginLeft: 6,
+                      }}
+                      aria-label={`Status: ${STATUS_LABELS[item.status]}`}
+                    >
+                      {STATUS_LABELS[item.status]}
+                    </span>
+                  )}
                 </>
               )}
             </div>

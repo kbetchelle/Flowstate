@@ -13,6 +13,8 @@ import { useViewStore } from '../stores/viewStore'
 import { findConflictingFields } from '../api/conflictResolution'
 import { useConflictStore } from '../stores/conflictStore'
 import { runOrEnqueueTaskUpdate, runOrEnqueueDirectoryUpdate } from '../lib/offlineQueue'
+import { getNextOccurrenceDates, hasRecurrence } from '../lib/recurrence'
+import { insertTask } from '../api/tasks'
 import { ColumnList, type ColumnItem } from './ColumnList'
 import { CalendarColumn } from './CalendarColumn'
 import { KanbanColumn } from './KanbanColumn'
@@ -81,6 +83,7 @@ export function ColumnView() {
       type: 'task' as const,
       label: t.title,
       isCompleted: t.is_completed,
+      status: t.status,
       category: t.category,
       priority: t.priority,
     })
@@ -145,14 +148,70 @@ export function ColumnView() {
     const task = tasks.find((t) => t.id === taskId)
     if (task) {
       const previous = { ...task }
-      const patch = { ...task, is_completed: !task.is_completed, version: task.version }
-      const localEntity = { ...task, is_completed: !task.is_completed }
+      const completing = !task.is_completed
+      const now = new Date().toISOString()
+      const status: TaskStatus = completing ? 'completed' : 'not_started'
+      const completed_at = completing ? now : null
+      const patch = {
+        ...task,
+        is_completed: completing,
+        status,
+        completed_at,
+        version: task.version,
+      }
+      const localEntity = { ...task, is_completed: completing, status, completed_at }
       runOrEnqueueTaskUpdate(userId, task.id, patch, localEntity).then((result) => {
         if ('queued' in result && result.queued) {
           upsertTask(localEntity)
         } else if ('ok' in result && result.ok) {
-          recordAction(userId, 'task_update', { taskId: task.id, previous, next: result.task })
-          upsertTask(result.task)
+          const updated = result.task
+          recordAction(userId, 'task_update', { taskId: task.id, previous, next: updated })
+          upsertTask(updated)
+          if (completing && hasRecurrence(updated)) {
+            const nextDates = getNextOccurrenceDates(updated)
+            if (nextDates) {
+              const tasksInDir = tasks.filter(
+                (t) => t.directory_id === updated.directory_id && !t.archived_at
+              )
+              const nextPosition =
+                tasksInDir.length === 0 ? 0 : Math.max(...tasksInDir.map((t) => t.position)) + 1
+              const checklistCopy = (updated.checklist_items ?? []).map((c, i) => ({
+                ...c,
+                id: crypto.randomUUID(),
+                is_completed: false,
+                position: i,
+              }))
+              const nextTask: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
+                title: updated.title,
+                directory_id: updated.directory_id,
+                priority: updated.priority,
+                start_date: nextDates.start_date,
+                due_date: nextDates.due_date,
+                description: updated.description ?? '',
+                is_completed: false,
+                completed_at: null,
+                status: 'not_started',
+                archived_at: null,
+                archive_reason: null,
+                position: nextPosition,
+                recurrence_frequency: updated.recurrence_frequency,
+                recurrence_interval: updated.recurrence_interval,
+                recurrence_end_date: updated.recurrence_end_date,
+                checklist_items: checklistCopy,
+                estimated_duration_minutes: updated.estimated_duration_minutes,
+                actual_duration_minutes: updated.actual_duration_minutes,
+                url: updated.url,
+                background_color: updated.background_color,
+                category: updated.category,
+                tags: [...(updated.tags ?? [])],
+                version: 1,
+              }
+              insertTask(userId, nextTask).then((t) => {
+                upsertTask(t)
+                recordAction(userId, 'task_create', { task: t })
+              })
+            }
+          }
         } else {
           const r = result as { ok: false; serverVersion: number; serverTask: Task }
           const conflictingFields = findConflictingFields(localEntity, r.serverTask)

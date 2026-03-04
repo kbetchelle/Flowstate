@@ -39,6 +39,22 @@ export interface AppState {
   /** Command palette open state (Cmd+K or \). */
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
+
+  /** Search overlay (Cmd+Shift+S). */
+  searchOverlayOpen: boolean
+  setSearchOverlayOpen: (open: boolean) => void
+
+  /** Shortcut sheet (Cmd+/). */
+  shortcutSheetOpen: boolean
+  setShortcutSheetOpen: (open: boolean) => void
+
+  /** Help sheet (from header). */
+  helpSheetOpen: boolean
+  setHelpSheetOpen: (open: boolean) => void
+
+  /** Dependency Graph (from palette). */
+  dependencyGraphOpen: boolean
+  setDependencyGraphOpen: (open: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -67,4 +83,16 @@ export const useAppStore = create<AppState>((set) => ({
 
   commandPaletteOpen: false,
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
+
+  searchOverlayOpen: false,
+  setSearchOverlayOpen: (searchOverlayOpen) => set({ searchOverlayOpen }),
+
+  shortcutSheetOpen: false,
+  setShortcutSheetOpen: (shortcutSheetOpen) => set({ shortcutSheetOpen }),
+
+  helpSheetOpen: false,
+  setHelpSheetOpen: (helpSheetOpen) => set({ helpSheetOpen }),
+
+  dependencyGraphOpen: false,
+  setDependencyGraphOpen: (dependencyGraphOpen) => set({ dependencyGraphOpen }),
 }))

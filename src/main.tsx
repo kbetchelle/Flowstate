@@ -15,6 +15,9 @@ function setOffline() {
 if (typeof window !== 'undefined') {
   window.addEventListener('online', setOnline)
   window.addEventListener('offline', setOffline)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

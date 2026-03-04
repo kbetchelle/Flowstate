@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flowstate</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      (function() {
+        var mode = localStorage.getItem('flowstate_theme_mode');
+        var resolved = mode === 'dark' || mode === 'light' ? mode : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', resolved);
+        var accent = localStorage.getItem('flowstate_theme_accent');
+        if (accent) document.documentElement.style.setProperty('--accent', accent);
+        else document.documentElement.style.removeProperty('--accent');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
