@@ -59,22 +59,28 @@ function ToastItem({
 
   const bg =
     toast.type === 'error'
-      ? '#ffebee'
+      ? 'var(--toast-error-bg)'
       : toast.type === 'success'
-        ? '#e8f5e9'
-        : '#e3f2fd'
-  const color = toast.type === 'error' ? '#c62828' : toast.type === 'success' ? '#2e7d32' : '#1565c0'
+        ? 'var(--toast-success-bg)'
+        : 'var(--toast-info-bg)'
+  const color =
+    toast.type === 'error'
+      ? 'var(--color-error)'
+      : toast.type === 'success'
+        ? 'var(--color-success)'
+        : 'var(--color-info)'
 
   return (
     <div
       role="status"
+      className="glass-surface"
       style={{
         padding: '12px 16px',
         borderRadius: 8,
         backgroundColor: bg,
         color,
         fontSize: 14,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        boxShadow: 'var(--glass-shadow)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

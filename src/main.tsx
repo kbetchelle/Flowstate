@@ -29,11 +29,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     if (this.state.error) {
       return (
         <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 600 }}>
-          <h1 style={{ color: '#c62828' }}>Something went wrong</h1>
-          <pre style={{ overflow: 'auto', background: '#f5f5f5', padding: 16, borderRadius: 8 }}>
+          <h1 style={{ color: 'var(--color-error)' }}>Something went wrong</h1>
+          <pre style={{ overflow: 'auto', background: 'var(--glass-bg)', padding: 16, borderRadius: 8 }}>
             {this.state.error.message}
           </pre>
-          <p style={{ color: '#666' }}>Check the browser console for more details.</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Check the browser console for more details.</p>
         </div>
       )
     }

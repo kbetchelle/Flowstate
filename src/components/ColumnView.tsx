@@ -133,6 +133,7 @@ export function ColumnView() {
     if (focusedItemId && focusedItemId !== namingNewItemId) {
       const el = container.querySelector(`[data-item-id="${focusedItemId}"]`) as HTMLElement | null
       el?.focus()
+      el?.scrollIntoView({ block: 'nearest' })
     } else if (!focusedItemId) {
       container.focus()
     }

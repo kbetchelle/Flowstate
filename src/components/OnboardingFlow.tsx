@@ -58,7 +58,7 @@ export function OnboardingFlow() {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'var(--overlay-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -67,11 +67,9 @@ export function OnboardingFlow() {
       onClick={(e) => e.target === e.currentTarget && dismiss()}
     >
       <div
+        className="glass-surface"
         style={{
-          backgroundColor: 'var(--bg, #fff)',
           padding: 24,
-          borderRadius: 8,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
           maxWidth: 400,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -79,14 +77,14 @@ export function OnboardingFlow() {
         <h2 id="onboarding-title" style={{ margin: '0 0 12px', fontSize: 18 }}>
           {current.title}
         </h2>
-        <p style={{ margin: '0 0 20px', fontSize: 14, color: '#555', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           {current.body}
         </p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button
             type="button"
             onClick={dismiss}
-            style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', color: '#666' }}
+            style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', color: 'var(--text-secondary)' }}
           >
             Skip
           </button>

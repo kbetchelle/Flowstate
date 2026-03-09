@@ -18,7 +18,7 @@ import { ShortcutSheet } from './components/ShortcutSheet'
 import { HelpSheet } from './components/HelpSheet'
 import { DependencyGraphView } from './components/DependencyGraphView'
 import { subscribeTasks, subscribeDirectories } from './lib/realtime'
-import { fetchDirectories } from './api/directories'
+import { fetchDirectories, seedFirstProject } from './api/directories'
 import { fetchTasks, autoArchiveCompletedOlderThan5Days } from './api/tasks'
 import { fetchUserSettings } from './api/userSettings'
 import { fetchLinksForUser } from './api/links'
@@ -60,7 +60,7 @@ function LoginScreen() {
   return (
     <div style={{ padding: 24, maxWidth: 360, margin: '40px auto' }}>
       <h1 style={{ marginTop: 0 }}>Flowstate</h1>
-      <p style={{ color: '#666', marginBottom: 24 }}>Sign in or create an account.</p>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Sign in or create an account.</p>
       <form onSubmit={handleSignIn}>
         <input
           type="email"
@@ -87,7 +87,7 @@ function LoginScreen() {
           </button>
         </div>
       </form>
-      {message && <p style={{ marginTop: 16, color: '#666' }}>{message}</p>}
+      {message && <p style={{ marginTop: 16, color: 'var(--text-secondary)' }}>{message}</p>}
     </div>
   )
 }
@@ -381,8 +381,8 @@ function AppShell() {
           role="status"
           style={{
             padding: '8px 16px',
-            backgroundColor: '#fff3e0',
-            color: '#e65100',
+            backgroundColor: 'var(--toast-info-bg)',
+            color: 'var(--color-info)',
             fontSize: 14,
             textAlign: 'center',
           }}
@@ -398,7 +398,7 @@ function AppShell() {
           paddingBottom: isMobile ? BOTTOM_NAV_HEIGHT : 0,
         }}
       >
-        <MainArea currentView={currentView} />
+        <MainArea currentView={currentView} onCloseSettings={() => setCurrentView('main_db')} />
       </div>
       {isMobile && (
         <>
@@ -414,11 +414,11 @@ function AppShell() {
               height: FAB_SIZE,
               borderRadius: '50%',
               border: 'none',
-              backgroundColor: 'var(--accent, #1976d2)',
-              color: '#fff',
+              backgroundColor: 'var(--accent)',
+              color: 'white',
               fontSize: 24,
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              boxShadow: 'var(--glass-shadow)',
               zIndex: 100,
             }}
           >
@@ -436,8 +436,8 @@ function AppShell() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-around',
-              borderTop: '1px solid #e0e0e0',
-              backgroundColor: 'var(--bg, #fafafa)',
+              borderTop: '1px solid var(--glass-border)',
+              backgroundColor: 'var(--bg)',
               zIndex: 99,
             }}
           >
@@ -579,16 +579,23 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
           fetchLinksForUser(userId),
         ])
         if (!cancelled) {
-          setDirectories(dirs)
-          setTasks(tasks)
-          setLinks(links)
-          if (settings) {
-            setSettings(settings)
-            setMode(settings.theme)
-            setAccent(settings.accent)
+          let dirsToSet = dirs
+          if (dirs.length === 0) {
+            const seeded = await seedFirstProject(userId)
+            if (!cancelled) dirsToSet = seeded
           }
-          const archived = await autoArchiveCompletedOlderThan5Days(userId, tasks)
-          if (!cancelled) archived.forEach((t) => upsertTask(t))
+          if (!cancelled) {
+            setDirectories(dirsToSet)
+            setTasks(tasks)
+            setLinks(links)
+            if (settings) {
+              setSettings(settings)
+              setMode(settings.theme)
+              setAccent(settings.accent)
+            }
+            const archived = await autoArchiveCompletedOlderThan5Days(userId, tasks)
+            if (!cancelled) archived.forEach((t) => upsertTask(t))
+          }
         }
       } catch (_) {
         if (!cancelled) {

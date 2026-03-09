@@ -13,6 +13,7 @@ import { useUIStore } from '../stores/uiStore'
 import { insertTask } from '../api/tasks'
 import { insertDirectory } from '../api/directories'
 import { recordAction } from '../lib/undo'
+import { useFeedbackStore } from '../stores/feedbackStore'
 import type { Task } from '../types'
 
 export interface CommandItem {
@@ -65,6 +66,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         label: 'New task',
         run: () => {
           if (!userId) return
+          if (currentDirectoryId === null) {
+            useFeedbackStore.getState().addToast('error', 'Tasks must live inside a directory. Please create the directory or move inside a directory to create a task')
+            return
+          }
           const dirId = currentDirectoryId
           const task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
             title: '',
@@ -266,7 +271,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'var(--overlay-backdrop)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
@@ -278,10 +283,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
+        className="glass-surface"
         style={{
-          backgroundColor: 'var(--bg, #fff)',
-          borderRadius: 8,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
           width: '100%',
           maxWidth: 420,
           maxHeight: 360,
@@ -303,7 +306,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             width: '100%',
             padding: '12px 16px',
             border: 'none',
-            borderBottom: '1px solid #e0e0e0',
+            borderBottom: '1px solid var(--divider)',
             fontSize: 16,
             outline: 'none',
             boxSizing: 'border-box',
@@ -319,7 +322,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           }}
         >
           {filtered.length === 0 ? (
-            <div style={{ padding: 12, color: '#666' }}>No matching commands</div>
+            <div style={{ padding: 12, color: 'var(--text-secondary)' }}>No matching commands</div>
           ) : (
             filtered.map((cmd, i) => (
               <div
@@ -331,14 +334,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   padding: '10px 16px',
                   cursor: 'pointer',
                   borderRadius: 4,
-                  backgroundColor: i === selectedIndex ? 'rgba(0,0,0,0.06)' : undefined,
+                  backgroundColor: i === selectedIndex ? 'var(--highlight-bg)' : undefined,
                 }}
                 onClick={() => cmd.run()}
                 onMouseEnter={() => setSelectedIndex(i)}
               >
                 <span>{cmd.label}</span>
                 {cmd.shortcut && (
-                  <span style={{ marginLeft: 8, color: '#888', fontSize: 13 }}>
+                  <span style={{ marginLeft: 8, color: 'var(--text-tertiary)', fontSize: 13 }}>
                     {cmd.shortcut}
                   </span>
                 )}

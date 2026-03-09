@@ -24,7 +24,7 @@ export function Breadcrumbs() {
       style={{
         padding: '8px 0',
         fontSize: 14,
-        color: '#666',
+        color: 'var(--text-secondary)',
       }}
     >
       {segments.join(' > ')}

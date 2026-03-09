@@ -8,7 +8,7 @@ import { useConflictStore } from '../stores/conflictStore'
 import { useAuthStore } from '../stores/authStore'
 import { useTaskStore } from '../stores/taskStore'
 import { useDirectoryStore } from '../stores/directoryStore'
-import { resolveWithVersion } from '../api/conflictResolution'
+import { resolveWithVersion, findConflictingFields } from '../api/conflictResolution'
 import { updateWithConflictCheck } from '../api/tasks'
 import { useFeedbackStore } from '../stores/feedbackStore'
 import { updateDirectoryWithConflictCheck } from '../api/directories'
@@ -117,7 +117,6 @@ export function ConflictDialog() {
           onAfterResolved?.()
           setOnAfterResolved(null)
         } else {
-          const { findConflictingFields } = await import('../api/conflictResolution')
           const localEntity2 = task
           const conflictingFields2 = findConflictingFields(localEntity2, result.serverTask)
           openConflict({
@@ -145,7 +144,6 @@ export function ConflictDialog() {
           onAfterResolved?.()
           setOnAfterResolved(null)
         } else {
-          const { findConflictingFields } = await import('../api/conflictResolution')
           const localEntity2 = dir
           const conflictingFields2 = findConflictingFields(localEntity2, result.serverDirectory)
           openConflict({
@@ -174,7 +172,7 @@ export function ConflictDialog() {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'var(--overlay-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -183,11 +181,9 @@ export function ConflictDialog() {
       onClick={(e) => e.target === e.currentTarget && closeConflict()}
     >
       <div
+        className="glass-surface"
         style={{
-          backgroundColor: 'var(--bg, #fff)',
           padding: 24,
-          borderRadius: 8,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
           maxWidth: 480,
           maxHeight: '85vh',
           overflow: 'auto',
@@ -197,7 +193,7 @@ export function ConflictDialog() {
         <h2 id="conflict-dialog-title" style={{ margin: '0 0 16px', fontSize: 18 }}>
           Conflict — {entityType === 'task' ? 'Task' : 'Directory'} was changed elsewhere
         </h2>
-        <p style={{ margin: '0 0 16px', color: '#666', fontSize: 14 }}>
+        <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>
           Choose which version to keep for each field. Then click Resolve to save.
         </p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -224,7 +220,7 @@ export function ConflictDialog() {
               <div
                 key={field}
                 style={{
-                  border: '1px solid #e0e0e0',
+                  border: '1px solid var(--divider)',
                   borderRadius: 4,
                   padding: 10,
                   marginBottom: 8,
@@ -233,10 +229,10 @@ export function ConflictDialog() {
                 <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6, textTransform: 'capitalize' }}>
                   {field.replace(/_/g, ' ')}
                 </div>
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
                   <strong>Mine:</strong> {formatValue(local)}
                 </div>
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
                   <strong>Theirs:</strong> {formatValue(server)}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -269,7 +265,7 @@ export function ConflictDialog() {
             )
           })}
         </div>
-        <p style={{ margin: '0 0 16px', fontSize: 12, color: '#888' }}>
+        <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--text-tertiary)' }}>
           Escape to cancel.
         </p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

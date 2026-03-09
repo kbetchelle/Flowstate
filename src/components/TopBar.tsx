@@ -37,13 +37,14 @@ export function TopBar({ onSettingsClick, onSearchClick, onHelpClick }: TopBarPr
   return (
     <header
       role="banner"
+      className="glass-surface"
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 16,
         padding: '8px 16px',
-        borderBottom: '1px solid #e0e0e0',
-        backgroundColor: '#fafafa',
+        borderBottom: '1px solid var(--glass-border)',
+        borderRadius: 0,
       }}
     >
       <h1
@@ -58,12 +59,12 @@ export function TopBar({ onSettingsClick, onSearchClick, onHelpClick }: TopBarPr
       <span
         aria-label={isOnline ? 'Connected' : 'Offline'}
         title={isOnline ? 'Connected' : 'Offline'}
-        style={{ fontSize: 12, color: isOnline ? '#2e7d32' : '#c62828' }}
+        style={{ fontSize: 12, color: isOnline ? 'var(--color-success)' : 'var(--color-error)' }}
       >
         ● {isOnline ? 'Connected' : 'Offline'}
       </span>
       {grabModeActive && (
-        <span style={{ fontSize: 12, color: '#666' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
           Grab mode: Arrows move drop target, Enter to drop, Esc to cancel.
         </span>
       )}

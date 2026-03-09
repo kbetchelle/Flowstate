@@ -10,6 +10,7 @@ import { SettingsView } from './SettingsView'
 
 interface MainAreaProps {
   currentView: CurrentView
+  onCloseSettings?: () => void
 }
 
 const labels: Record<CurrentView, string> = {
@@ -19,7 +20,7 @@ const labels: Record<CurrentView, string> = {
   settings: 'Settings',
 }
 
-export function MainArea({ currentView }: MainAreaProps) {
+export function MainArea({ currentView, onCloseSettings }: MainAreaProps) {
   if (currentView === 'main_db') {
     return (
       <main
@@ -52,7 +53,7 @@ export function MainArea({ currentView }: MainAreaProps) {
           overflow: 'auto',
         }}
       >
-        <SettingsView />
+        <SettingsView onClose={onCloseSettings} />
       </main>
     )
   }
@@ -67,7 +68,7 @@ export function MainArea({ currentView }: MainAreaProps) {
         overflow: 'auto',
       }}
     >
-      <p style={{ margin: 0, color: '#666' }}>{labels[currentView]}</p>
+      <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{labels[currentView]}</p>
     </main>
   )
 }

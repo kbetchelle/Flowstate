@@ -231,12 +231,12 @@ export function FullEditPanel() {
   if (!editPanelTaskId) return null
 
   const formStyle = { marginBottom: 16 }
-  const labelStyle = { display: 'block', fontSize: 12, color: '#666', marginBottom: 4 }
+  const labelStyle = { display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }
   const inputStyle = {
     width: '100%',
     padding: '8px 10px',
     fontSize: 14,
-    border: '1px solid #ddd',
+    border: '1px solid var(--input-border)',
     borderRadius: 4,
     boxSizing: 'border-box' as const,
   }
@@ -255,8 +255,11 @@ export function FullEditPanel() {
         width: 420,
         maxWidth: '100%',
         height: '100%',
-        backgroundColor: 'var(--bg, #fff)',
-        boxShadow: '-2px 0 12px rgba(0,0,0,0.15)',
+        background: 'var(--surface-overlay)',
+        backdropFilter: 'blur(12px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+        borderLeft: '1px solid var(--glass-border)',
+        boxShadow: 'var(--glass-shadow)',
         zIndex: 900,
         display: 'flex',
         flexDirection: 'column',
@@ -266,7 +269,7 @@ export function FullEditPanel() {
       <div
         style={{
           padding: 16,
-          borderBottom: '1px solid #eee',
+          borderBottom: '1px solid var(--divider)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -284,7 +287,7 @@ export function FullEditPanel() {
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {!task ? (
-          <p style={{ margin: 0, color: '#999' }}>Loading…</p>
+          <p style={{ margin: 0, color: 'var(--text-tertiary)' }}>Loading…</p>
         ) : (
           <>
             <div style={formStyle}>
@@ -445,7 +448,7 @@ export function FullEditPanel() {
                           {a.name}
                         </a>
                       ) : (
-                        <span style={{ marginRight: 8, color: '#888' }}>{a.name}</span>
+                        <span style={{ marginRight: 8, color: 'var(--text-tertiary)' }}>{a.name}</span>
                       )}
                       <button type="button" onClick={() => onDeleteAttachment(a.path)} aria-label="Delete">
                         Delete
@@ -457,11 +460,11 @@ export function FullEditPanel() {
             </div>
             <div style={formStyle}>
               <label style={labelStyle}>Task links</label>
-              <p style={{ margin: '0 0 8px', fontSize: 12, color: '#666' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-secondary)' }}>
                 <button
                   type="button"
                   onClick={() => setDependencyGraphOpen(true)}
-                  style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent, #1976d2)', cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}
+                  style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}
                 >
                   Open full Dependency Graph
                 </button>
@@ -514,7 +517,7 @@ export function FullEditPanel() {
                         Add link
                       </button>
                     ) : (
-                      <div style={{ marginTop: 8, padding: 8, border: '1px solid #eee', borderRadius: 4 }}>
+                      <div style={{ marginTop: 8, padding: 8, border: '1px solid var(--divider)', borderRadius: 4 }}>
                         <label style={{ ...labelStyle, marginBottom: 4 }}>Task</label>
                         <select
                           value={addLinkTargetId}
@@ -541,7 +544,7 @@ export function FullEditPanel() {
                           <option value="dependency">Dependency</option>
                         </select>
                         {addLinkError && (
-                          <p style={{ margin: '0 0 8px', color: '#c62828', fontSize: 13 }}>{addLinkError}</p>
+                          <p style={{ margin: '0 0 8px', color: 'var(--color-error)', fontSize: 13 }}>{addLinkError}</p>
                         )}
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button

@@ -99,7 +99,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'var(--overlay-backdrop)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
@@ -114,10 +114,8 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
+        className="glass-surface"
         style={{
-          backgroundColor: 'var(--bg, #fff)',
-          borderRadius: 8,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
           width: '100%',
           maxWidth: 480,
           maxHeight: 400,
@@ -139,7 +137,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
             width: '100%',
             padding: '12px 16px',
             border: 'none',
-            borderBottom: '1px solid #e0e0e0',
+            borderBottom: '1px solid var(--divider)',
             fontSize: 16,
             outline: 'none',
             boxSizing: 'border-box',
@@ -155,9 +153,9 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
           }}
         >
           {loading ? (
-            <div style={{ padding: 12, color: '#666' }}>Searching…</div>
+            <div style={{ padding: 12, color: 'var(--text-secondary)' }}>Searching…</div>
           ) : results.length === 0 ? (
-            <div style={{ padding: 12, color: '#666' }}>
+            <div style={{ padding: 12, color: 'var(--text-secondary)' }}>
               {query.trim() ? 'No matching tasks' : 'Type to search tasks'}
             </div>
           ) : (
@@ -171,14 +169,14 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
                   padding: '10px 16px',
                   cursor: 'pointer',
                   borderRadius: 4,
-                  backgroundColor: i === selectedIndex ? 'rgba(0,0,0,0.06)' : undefined,
+                  backgroundColor: i === selectedIndex ? 'var(--highlight-bg)' : undefined,
                 }}
                 onClick={() => openTask(task)}
                 onMouseEnter={() => setSelectedIndex(i)}
               >
                 <span style={{ fontWeight: 500 }}>{task.title || '(No title)'}</span>
                 {task.due_date && (
-                  <span style={{ marginLeft: 8, color: '#888', fontSize: 13 }}>{task.due_date}</span>
+                  <span style={{ marginLeft: 8, color: 'var(--text-tertiary)', fontSize: 13 }}>{task.due_date}</span>
                 )}
               </div>
             ))

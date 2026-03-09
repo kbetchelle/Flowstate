@@ -77,11 +77,11 @@ export const KanbanColumn = forwardRef<HTMLDivElement, KanbanColumnProps>(functi
       ref={ref}
       role="list"
       data-column-index={columnIndex}
+      className="glass-panel"
       tabIndex={-1}
       style={{
         minWidth: 360,
         maxWidth: 480,
-        borderRight: '1px solid #e0e0e0',
         padding: 8,
         overflowY: 'auto',
         outline: 'none',
@@ -110,7 +110,7 @@ export const KanbanColumn = forwardRef<HTMLDivElement, KanbanColumnProps>(functi
                   padding: '6px 10px',
                   cursor: 'pointer',
                   borderRadius: 4,
-                  backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : isFocused ? 'rgba(0,0,0,0.04)' : undefined,
+                  backgroundColor: isSelected ? 'var(--highlight-bg-strong)' : isFocused ? 'var(--highlight-bg)' : undefined,
                   outline: 'none',
                 }}
               >
@@ -133,14 +133,14 @@ export const KanbanColumn = forwardRef<HTMLDivElement, KanbanColumnProps>(functi
                 flex: 1,
                 minWidth: 100,
                 borderRadius: 8,
-                backgroundColor: 'rgba(0,0,0,0.03)',
+                backgroundColor: 'var(--highlight-bg)',
                 padding: 8,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 6,
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
                 {STATUS_LABELS[status]}
               </div>
               {statusTasks.map((task) => {
@@ -165,12 +165,12 @@ export const KanbanColumn = forwardRef<HTMLDivElement, KanbanColumnProps>(functi
                       padding: '8px 10px',
                       borderRadius: 6,
                       cursor: 'pointer',
-                      backgroundColor: isSelected ? 'rgba(0,0,0,0.08)' : isFocused ? 'rgba(0,0,0,0.06)' : bg ?? 'white',
+                      backgroundColor: isSelected ? 'var(--highlight-bg-strong)' : isFocused ? 'var(--highlight-bg)' : bg ?? 'var(--surface-raised)',
                       outline: 'none',
                       fontSize: 13,
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                      boxShadow: 'var(--glass-shadow)',
                       textDecoration: task.is_completed ? 'line-through' : undefined,
-                      color: task.is_completed ? '#888' : undefined,
+                      color: task.is_completed ? 'var(--text-tertiary)' : undefined,
                     }}
                   >
                     {task.title || '(Untitled)'}
@@ -182,7 +182,7 @@ export const KanbanColumn = forwardRef<HTMLDivElement, KanbanColumnProps>(functi
         })}
       </div>
       {items.length === 0 && (
-        <div style={{ padding: 12, color: '#999', fontSize: 14 }}>Empty</div>
+        <div style={{ padding: 12, color: 'var(--text-tertiary)', fontSize: 14 }}>directory empty</div>
       )}
       {userId && <MultiLineEntry directoryId={directoryId} userId={userId} />}
     </div>

@@ -79,11 +79,11 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
       ref={ref}
       role="list"
       data-column-index={columnIndex}
+      className="glass-panel"
       tabIndex={-1}
       style={{
         minWidth: 320,
         maxWidth: 400,
-        borderRight: '1px solid #e0e0e0',
         padding: 8,
         overflowY: 'auto',
         outline: 'none',
@@ -109,7 +109,7 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
                   padding: '6px 10px',
                   cursor: 'pointer',
                   borderRadius: 4,
-                  backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : isFocused ? 'rgba(0,0,0,0.04)' : undefined,
+                  backgroundColor: isSelected ? 'var(--highlight-bg-strong)' : isFocused ? 'var(--highlight-bg)' : undefined,
                   outline: 'none',
                 }}
               >
@@ -133,7 +133,7 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
         })
         return (
           <div key={monthKey} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
               {monthLabel}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -163,15 +163,15 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
                       padding: '6px 10px',
                       borderRadius: 4,
                       cursor: 'pointer',
-                      backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : isFocused ? 'rgba(0,0,0,0.04)' : bg,
+                      backgroundColor: isSelected ? 'var(--highlight-bg-strong)' : isFocused ? 'var(--highlight-bg)' : bg,
                       outline: 'none',
                       fontSize: 13,
                       textDecoration: task.is_completed ? 'line-through' : undefined,
-                      color: task.is_completed ? '#888' : undefined,
+                      color: task.is_completed ? 'var(--text-tertiary)' : undefined,
                     }}
                   >
                     {task.due_date && (
-                      <span style={{ fontSize: 11, color: '#888', marginRight: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginRight: 6 }}>
                         {new Date(task.due_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                       </span>
                     )}
@@ -185,7 +185,7 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
       })}
       {noDate.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 6 }}>No date</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>No date</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {noDate.map((task) => {
               const isFocused = focusedItemId === task.id
@@ -213,11 +213,11 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
                     padding: '6px 10px',
                     borderRadius: 4,
                     cursor: 'pointer',
-                    backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : isFocused ? 'rgba(0,0,0,0.04)' : bg,
+                    backgroundColor: isSelected ? 'var(--highlight-bg-strong)' : isFocused ? 'var(--highlight-bg)' : bg,
                     outline: 'none',
                     fontSize: 13,
                     textDecoration: task.is_completed ? 'line-through' : undefined,
-                    color: task.is_completed ? '#888' : undefined,
+                    color: task.is_completed ? 'var(--text-tertiary)' : undefined,
                   }}
                 >
                   {task.title || '(Untitled)'}
@@ -228,7 +228,7 @@ export const CalendarColumn = forwardRef<HTMLDivElement, CalendarColumnProps>(fu
         </div>
       )}
       {items.length === 0 && (
-        <div style={{ padding: 12, color: '#999', fontSize: 14 }}>Empty</div>
+        <div style={{ padding: 12, color: 'var(--text-tertiary)', fontSize: 14 }}>directory empty</div>
       )}
       {userId && <MultiLineEntry directoryId={directoryId} userId={userId} />}
     </div>

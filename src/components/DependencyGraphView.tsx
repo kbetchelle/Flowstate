@@ -63,7 +63,7 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'var(--overlay-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -77,11 +77,9 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
+        className="glass-surface"
         style={{
-          backgroundColor: 'var(--bg, #fff)',
           padding: 16,
-          borderRadius: 8,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
           maxWidth: '90vw',
           maxHeight: '90vh',
           overflow: 'auto',
@@ -102,7 +100,7 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         {links.length === 0 ? (
-          <p style={{ margin: 0, color: '#666' }}>No task links yet. Add links in the full edit panel (Cmd+Shift+E on a task).</p>
+          <p style={{ margin: 0, color: 'var(--text-secondary)' }}>No task links yet. Add links in the full edit panel (Cmd+Shift+E on a task).</p>
         ) : (
           <svg
             width={width}
@@ -118,7 +116,7 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
                 refY="4"
                 orient="auto"
               >
-                <path d="M0,0 L8,4 L0,8 Z" fill="#666" />
+                <path d="M0,0 L8,4 L0,8 Z" fill="var(--text-secondary)" />
               </marker>
             </defs>
             {links.map((link) => {
@@ -129,7 +127,7 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
               const sy = src.y + NODE_HEIGHT
               const tx = tgt.x + NODE_WIDTH / 2
               const ty = tgt.y
-              const stroke = link.link_type === 'dependency' ? '#1976d2' : '#888'
+              const stroke = link.link_type === 'dependency' ? 'var(--accent)' : 'var(--text-tertiary)'
               return (
                 <line
                   key={link.id}
@@ -154,8 +152,8 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
                     width={NODE_WIDTH}
                     height={NODE_HEIGHT}
                     rx={6}
-                    fill="var(--bg, #fff)"
-                    stroke="#666"
+                    fill="var(--bg)"
+                    stroke="var(--text-secondary)"
                     strokeWidth={1}
                     style={{ cursor: 'pointer' }}
                     onClick={() => setEditPanelTaskId(id)}
@@ -165,7 +163,7 @@ export function DependencyGraphView({ onClose }: { onClose: () => void }) {
                     y={pos.y + NODE_HEIGHT / 2 + 4}
                     textAnchor="middle"
                     fontSize={12}
-                    fill="var(--text, #111)"
+                    fill="var(--text)"
                     style={{ pointerEvents: 'none' }}
                   >
                     {(taskTitle(id) || '(No title)').slice(0, 20)}

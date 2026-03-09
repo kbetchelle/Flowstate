@@ -17,6 +17,7 @@ import { findConflictingFields } from '../api/conflictResolution'
 import { useConflictStore } from '../stores/conflictStore'
 import { copySelection, cutSelection, copyRecursive, paste } from '../lib/clipboard'
 import { recordAction } from '../lib/undo'
+import { useFeedbackStore } from '../stores/feedbackStore'
 import type { ColumnItem } from '../components/ColumnList'
 import type { Task } from '../types'
 
@@ -348,6 +349,10 @@ export function useColumnKeyboard(
           : null
         const depthLevel = parentDir ? parentDir.depth_level + 1 : 0
         if (e.key === 't') {
+          if (currentDirectoryId === null) {
+            useFeedbackStore.getState().addToast('error', 'Tasks must live inside a directory. Please create the directory or move inside a directory to create a task')
+            return
+          }
           const tasks = useTaskStore.getState().tasks
           const tasksInDir = tasks.filter((t) => t.directory_id === currentDirectoryId)
           const nextPosition =

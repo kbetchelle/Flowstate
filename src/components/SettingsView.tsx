@@ -17,7 +17,11 @@ const THEMES: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: 'System' },
 ]
 
-export function SettingsView() {
+interface SettingsViewProps {
+  onClose?: () => void
+}
+
+export function SettingsView({ onClose }: SettingsViewProps) {
   const userId = useAuthStore((s) => s.user?.id)
   const mode = useThemeStore((s) => s.mode)
   const setMode = useThemeStore((s) => s.setMode)
@@ -68,6 +72,7 @@ export function SettingsView() {
       setSettings(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+      onClose?.()
     } finally {
       setSaving(false)
     }
@@ -78,7 +83,39 @@ export function SettingsView() {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <h2 style={{ margin: '0 0 24px', fontSize: 20 }}>Settings</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h2 style={{ margin: 0, fontSize: 20 }}>Settings</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onClose && (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{ padding: '8px 16px', fontSize: 14 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                style={{
+                  padding: 6,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                  fontSize: 18,
+                  lineHeight: 1,
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                ×
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       <section style={{ marginBottom: 32 }}>
         <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Theme</h3>
@@ -110,7 +147,7 @@ export function SettingsView() {
               width: 120,
               padding: '8px 10px',
               fontSize: 14,
-              border: '1px solid #ddd',
+              border: '1px solid var(--input-border)',
               borderRadius: 4,
             }}
           />
@@ -118,14 +155,14 @@ export function SettingsView() {
             type="color"
             value={accent ?? '#1976d2'}
             onChange={(e) => setAccent(e.target.value)}
-            style={{ width: 36, height: 36, padding: 0, border: '1px solid #ddd', cursor: 'pointer' }}
+            style={{ width: 36, height: 36, padding: 0, border: '1px solid var(--input-border)', cursor: 'pointer' }}
           />
         </div>
       </section>
 
       <section style={{ marginBottom: 32 }}>
         <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Keyboard shortcuts</h3>
-        <p style={{ margin: '0 0 16px', color: '#666', fontSize: 14 }}>
+        <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>
           Click &quot;Set&quot; then press the key combination you want.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -137,7 +174,7 @@ export function SettingsView() {
                 alignItems: 'center',
                 gap: 12,
                 padding: '8px 0',
-                borderBottom: '1px solid #eee',
+                borderBottom: '1px solid var(--divider)',
               }}
             >
               <span style={{ flex: 1, fontSize: 14 }}>{action.label}</span>
@@ -146,7 +183,7 @@ export function SettingsView() {
                   minWidth: 140,
                   padding: '4px 8px',
                   fontSize: 13,
-                  background: recordingId === action.id ? '#fff3e0' : '#f5f5f5',
+                  background: recordingId === action.id ? 'var(--highlight-bg)' : 'var(--glass-bg)',
                   borderRadius: 4,
                 }}
               >
@@ -169,7 +206,7 @@ export function SettingsView() {
                       return next
                     })
                   }
-                  style={{ padding: '4px 8px', fontSize: 12, color: '#666' }}
+                  style={{ padding: '4px 8px', fontSize: 12, color: 'var(--text-secondary)' }}
                 >
                   Reset
                 </button>
@@ -188,7 +225,7 @@ export function SettingsView() {
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {saved && <span style={{ color: '#2e7d32', fontSize: 14 }}>Saved</span>}
+        {saved && <span style={{ color: 'var(--color-success)', fontSize: 14 }}>Saved</span>}
       </div>
     </div>
   )

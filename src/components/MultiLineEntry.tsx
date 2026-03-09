@@ -6,8 +6,12 @@
 import { useState, useRef } from 'react'
 import { useTaskStore } from '../stores/taskStore'
 import { useUIStore } from '../stores/uiStore'
+import { useFeedbackStore } from '../stores/feedbackStore'
 import { insertTask } from '../api/tasks'
+import { recordAction } from '../lib/undo'
 import type { Task } from '../types'
+
+const ROOT_TASK_MESSAGE = 'Tasks must live inside a directory. Please create the directory or move inside a directory to create a task'
 
 interface MultiLineEntryProps {
   directoryId: string | null
@@ -52,10 +56,16 @@ export function MultiLineEntry({ directoryId, userId }: MultiLineEntryProps) {
     return inDir.length === 0 ? 0 : Math.max(...inDir.map((t) => t.position)) + 1
   }
 
-  const createTaskForLine = async (title: string) => {
+  const createTaskForLine = async (title: string): Promise<boolean> => {
+    if (directoryId === null) {
+      useFeedbackStore.getState().addToast('error', ROOT_TASK_MESSAGE)
+      return false
+    }
     const position = getNextPosition()
     const task = await insertTask(userId, { ...emptyTaskPayload(directoryId, position), title })
     upsertTask(task)
+    recordAction(userId, 'task_create', { task })
+    return true
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -69,14 +79,16 @@ export function MultiLineEntry({ directoryId, userId }: MultiLineEntryProps) {
     const line = (lineEnd === -1 ? text.slice(lineStart) : text.slice(lineStart, lineEnd)).trim()
     if (line) {
       e.preventDefault()
-      createTaskForLine(line).then(() => {
-        const newText = text.slice(0, start) + '\n' + text.slice(start)
-        setValue(newText)
-        requestAnimationFrame(() => {
-          if (textareaRef.current) {
-            textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1
-          }
-        })
+      createTaskForLine(line).then((created) => {
+        if (created) {
+          const newText = text.slice(0, start) + '\n' + text.slice(start)
+          setValue(newText)
+          requestAnimationFrame(() => {
+            if (textareaRef.current) {
+              textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1
+            }
+          })
+        }
       })
     }
   }
@@ -84,8 +96,12 @@ export function MultiLineEntry({ directoryId, userId }: MultiLineEntryProps) {
   const handleBlur = async () => {
     const lines = value.split('\n').map((l) => l.trim()).filter(Boolean)
     if (lines.length > 0) {
-      for (const title of lines) await createTaskForLine(title)
-      setValue('')
+      let created = 0
+      for (const title of lines) {
+        const ok = await createTaskForLine(title)
+        if (ok) created++
+      }
+      if (created > 0) setValue('')
     }
     setCreationContextActive(false)
   }

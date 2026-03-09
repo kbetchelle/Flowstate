@@ -8,6 +8,7 @@ import { useAppStore } from '../stores/appStore'
 import { useTaskStore } from '../stores/taskStore'
 import { useDirectoryStore } from '../stores/directoryStore'
 import { useClipboardStore } from '../stores/clipboardStore'
+import { useFeedbackStore } from '../stores/feedbackStore'
 import { insertTask, deleteTask } from '../api/tasks'
 import { insertDirectory, deleteDirectory } from '../api/directories'
 import { recordAction } from './undo'
@@ -88,6 +89,8 @@ export function copyRecursive(): boolean {
   return true
 }
 
+const PASTE_ROOT_TASK_MESSAGE = 'Tasks must live inside a directory. Please create the directory or move inside a directory to create a task'
+
 /** Paste into target directory; always applies metadata (target dir, position). Returns new task/dir ids for focus. */
 export async function paste(
   userId: string,
@@ -96,6 +99,10 @@ export async function paste(
   const { contents, isCut } = useClipboardStore.getState()
   if (!contents || (contents.tasks.length === 0 && contents.directories.length === 0)) {
     return { newTaskIds: [], newDirectoryIds: [] }
+  }
+
+  if (targetDirectoryId === null && contents.tasks.length > 0) {
+    useFeedbackStore.getState().addToast('error', PASTE_ROOT_TASK_MESSAGE)
   }
 
   const upsertTask = useTaskStore.getState().upsertTask
@@ -107,7 +114,7 @@ export async function paste(
   const insertedDirs: Directory[] = []
 
   const dirsToCreate = [...contents.directories].sort((a, b) => a.depth_level - b.depth_level)
-  const tasksToCreate = contents.tasks
+  const tasksToCreate = targetDirectoryId === null ? [] : contents.tasks
 
   const oldDirIdToNew = new Map<string, string>()
   let nextDirPosition = 0
@@ -180,8 +187,7 @@ export async function paste(
     insertedTasks.push(newTask)
   }
 
-  await recordAction(userId, 'paste', { tasks: insertedTasks, directories: insertedDirs })
-
+  // Record in reverse chronological order so undo pops most recent first: paste last, bulk_delete (cut) before it.
   if (isCut) {
     await recordAction(userId, 'bulk_delete', {
       tasks: contents.tasks,
@@ -197,6 +203,7 @@ export async function paste(
     }
     useClipboardStore.getState().clear()
   }
+  await recordAction(userId, 'paste', { tasks: insertedTasks, directories: insertedDirs })
 
   return { newTaskIds, newDirectoryIds }
 }

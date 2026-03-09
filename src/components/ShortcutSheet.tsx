@@ -29,7 +29,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'var(--overlay-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -43,11 +43,9 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
+        className="glass-surface"
         style={{
-          backgroundColor: 'var(--bg, #fff)',
           padding: 24,
-          borderRadius: 8,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
           maxWidth: 480,
           maxHeight: '85vh',
           overflow: 'auto',
@@ -55,13 +53,13 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>Keyboard shortcuts</h2>
-        <p style={{ margin: '0 0 16px', color: '#666', fontSize: 14 }}>
+        <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>
           Escape to close.
         </p>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <tbody>
             {SHORTCUT_SHEET_ENTRIES.map((row, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+              <tr key={i} style={{ borderBottom: '1px solid var(--divider)' }}>
                 <td
                   style={{
                     padding: '8px 12px 8px 0',
@@ -72,7 +70,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }) {
                 >
                   {row.keys}
                 </td>
-                <td style={{ padding: 8, color: '#333' }}>{row.label}</td>
+                <td style={{ padding: 8, color: 'var(--text)' }}>{row.label}</td>
               </tr>
             ))}
           </tbody>

@@ -76,6 +76,32 @@ export async function deleteDirectory(userId: string, id: string): Promise<void>
   if (error) throw error
 }
 
+const FIRST_PROJECT_NAME = 'Your First Project'
+const FIRST_PROJECT_SUBDIRS = ['Getting started', 'Ideas', 'In progress', 'Done']
+
+/** Create "Your First Project" and 3–4 subdirectories for new users with no directories. */
+export async function seedFirstProject(userId: string): Promise<Directory[]> {
+  const root = await insertDirectory(userId, {
+    name: FIRST_PROJECT_NAME,
+    parent_id: null,
+    position: 0,
+    depth_level: 0,
+    version: 1,
+  })
+  const created: Directory[] = [root]
+  for (let i = 0; i < FIRST_PROJECT_SUBDIRS.length; i++) {
+    const sub = await insertDirectory(userId, {
+      name: FIRST_PROJECT_SUBDIRS[i],
+      parent_id: root.id,
+      position: i,
+      depth_level: 1,
+      version: 1,
+    })
+    created.push(sub)
+  }
+  return created
+}
+
 export async function fetchDirectory(
   userId: string,
   id: string
