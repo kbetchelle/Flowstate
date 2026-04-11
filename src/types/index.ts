@@ -99,3 +99,16 @@ export interface FilterState {
 
 /** View state only (no URL routing per spec). */
 export type CurrentView = 'main_db' | 'upcoming' | 'archive' | 'settings'
+
+export interface Profile {
+  user_id: string
+  username: string
+  first_name: string | null
+  last_name: string | null
+  nickname: string | null
+  contact_email: string | null
+  date_of_birth: string | null  // ISO "YYYY-MM-DD" or null
+  gender: string | null
+  created_at: string
+  updated_at: string
+}

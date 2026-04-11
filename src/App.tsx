@@ -1,5 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from './lib/supabase'
+import {
+  isBiometricSupported,
+  getBiometricData,
+  setupBiometric,
+  authenticateWithBiometric,
+  clearBiometric,
+  usernameToEmail,
+} from './lib/biometric'
 import type { Session } from '@supabase/supabase-js'
 import { useAppStore } from './stores/appStore'
 import { useAuthStore } from './stores/authStore'
@@ -23,6 +31,8 @@ import { fetchTasks, autoArchiveCompletedOlderThan5Days } from './api/tasks'
 import { fetchUserSettings } from './api/userSettings'
 import { fetchLinksForUser } from './api/links'
 import { useLinkStore } from './stores/linkStore'
+import { fetchProfile } from './api/profiles'
+import { useProfileStore } from './stores/profileStore'
 import { useDirectoryStore } from './stores/directoryStore'
 import { useNetworkStore } from './stores/networkStore'
 import { useThemeStore } from './stores/themeStore'
@@ -32,43 +42,115 @@ import { processOfflineQueue } from './lib/offlineQueue'
 import { keyEventToCombo, getActionIdForCombo } from './constants/shortcuts'
 import './index.css'
 
+function validateUsername(username: string): string | null {
+  if (!username) return 'Username is required.'
+  if (!/^[a-zA-Z0-9._-]+$/.test(username))
+    return 'Username can only contain letters, numbers, dots, hyphens, and underscores.'
+  return null
+}
+
 function LoginScreen() {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [biometricReady, setBiometricReady] = useState(false)
+  const [biometricUsername, setBiometricUsername] = useState('')
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setMessage(null)
-    const { error } = await supabase.auth.signUp({ email, password })
-    setLoading(false)
-    if (error) setMessage(error.message)
-    else setMessage('Check your email for the confirmation link.')
-  }
+  useEffect(() => {
+    if (!isBiometricSupported()) return
+    const data = getBiometricData()
+    if (data) {
+      setBiometricReady(true)
+      setBiometricUsername(data.username)
+      setUsername(data.username)
+    }
+  }, [])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+    const err = validateUsername(username)
+    if (err) { setMessage(err); return }
     setLoading(true)
     setMessage(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email: usernameToEmail(username),
+      password,
+    })
+    setLoading(false)
+    if (error) {
+      setMessage(error.message)
+    } else if (isBiometricSupported() && !getBiometricData()) {
+      // Signal App to offer biometric setup after session is established
+      sessionStorage.setItem('flowstate_offer_biometric', username)
+    }
+  }
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const err = validateUsername(username)
+    if (err) { setMessage(err); return }
+    setLoading(true)
+    setMessage(null)
+    const { error } = await supabase.auth.signUp({
+      email: usernameToEmail(username),
+      password,
+      options: { data: { username } },
+    })
     setLoading(false)
     if (error) setMessage(error.message)
+    else setMessage('Account created! You can now sign in.')
+  }
+
+  const handleBiometric = async () => {
+    setLoading(true)
+    setMessage(null)
+    const data = await authenticateWithBiometric()
+    if (!data) {
+      setLoading(false)
+      setMessage('Biometric authentication failed. Please sign in with your password.')
+      return
+    }
+    const { error } = await supabase.auth.refreshSession({ refresh_token: data.refreshToken })
+    setLoading(false)
+    if (error) {
+      setMessage('Session expired. Please sign in with your password.')
+      clearBiometric()
+      setBiometricReady(false)
+    }
+    // On success, onAuthStateChange in App handles the rest
   }
 
   return (
     <div style={{ padding: 24, maxWidth: 360, margin: '40px auto' }}>
       <h1 style={{ marginTop: 0 }}>Flowstate</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Sign in or create an account.</p>
+
+      {biometricReady && (
+        <div style={{ marginBottom: 24 }}>
+          <button
+            type="button"
+            onClick={handleBiometric}
+            disabled={loading}
+            style={{ display: 'block', width: '100%', padding: '12px 16px', marginBottom: 8, fontSize: 15, cursor: 'pointer' }}
+          >
+            Sign in as {biometricUsername} with biometric
+          </button>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', margin: '0 0 16px' }}>
+            or enter your password below
+          </p>
+        </div>
+      )}
+
       <form onSubmit={handleSignIn}>
         <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           required
-          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8 }}
+          autoComplete="username"
+          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8, boxSizing: 'border-box' }}
         />
         <input
           type="password"
@@ -76,7 +158,8 @@ function LoginScreen() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          style={{ display: 'block', width: '100%', marginBottom: 16, padding: 8 }}
+          autoComplete="current-password"
+          style={{ display: 'block', width: '100%', marginBottom: 16, padding: 8, boxSizing: 'border-box' }}
         />
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="submit" disabled={loading} style={{ padding: '8px 16px' }}>
@@ -88,6 +171,85 @@ function LoginScreen() {
         </div>
       </form>
       {message && <p style={{ marginTop: 16, color: 'var(--text-secondary)' }}>{message}</p>}
+    </div>
+  )
+}
+
+function BiometricSetupModal({
+  username,
+  refreshToken,
+  onDone,
+}: {
+  username: string
+  refreshToken: string
+  onDone: () => void
+}) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+
+  const handleEnable = async () => {
+    setStatus('loading')
+    const ok = await setupBiometric(username, refreshToken)
+    if (ok) {
+      setStatus('success')
+      setTimeout(onDone, 1200)
+    } else {
+      setStatus('error')
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 999,
+      }}
+    >
+      <div
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 12,
+          padding: 32,
+          maxWidth: 360,
+          width: '100%',
+          margin: 16,
+          backdropFilter: 'var(--glass-blur)',
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Enable biometric login?</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>
+          Sign in faster next time using Face ID, Touch ID, or your device's fingerprint sensor.
+        </p>
+        {status === 'idle' && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
+            <button type="button" onClick={handleEnable} style={{ flex: 1, padding: '10px 16px' }}>
+              Enable
+            </button>
+            <button type="button" onClick={onDone} style={{ flex: 1, padding: '10px 16px' }}>
+              Skip
+            </button>
+          </div>
+        )}
+        {status === 'loading' && <p>Setting up…</p>}
+        {status === 'success' && (
+          <p style={{ color: 'var(--color-success, green)' }}>Biometric login enabled!</p>
+        )}
+        {status === 'error' && (
+          <>
+            <p style={{ color: 'var(--color-error, red)' }}>
+              Biometric setup failed. This feature may not be supported on your device or browser.
+            </p>
+            <button type="button" onClick={onDone} style={{ marginTop: 8, padding: '8px 16px' }}>
+              Close
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -498,6 +660,7 @@ function AppShell() {
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [offerBiometric, setOfferBiometric] = useState<{ username: string; refreshToken: string } | null>(null)
   const setAuthSession = useAuthStore((s) => s.setSession)
 
   useEffect(() => {
@@ -518,9 +681,17 @@ export default function App() {
 
     init()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s)
       setAuthSession(s)
+
+      if (event === 'SIGNED_IN' && s) {
+        const pendingUsername = sessionStorage.getItem('flowstate_offer_biometric')
+        if (pendingUsername) {
+          sessionStorage.removeItem('flowstate_offer_biometric')
+          setOfferBiometric({ username: pendingUsername, refreshToken: s.refresh_token })
+        }
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -538,7 +709,18 @@ export default function App() {
     return <LoginScreen />
   }
 
-  return <AppShellWithRealtime userId={session.user.id} />
+  return (
+    <>
+      <AppShellWithRealtime userId={session.user.id} />
+      {offerBiometric && (
+        <BiometricSetupModal
+          username={offerBiometric.username}
+          refreshToken={offerBiometric.refreshToken}
+          onDone={() => setOfferBiometric(null)}
+        />
+      )}
+    </>
+  )
 }
 
 function AppShellWithRealtime({ userId }: { userId: string }) {
@@ -551,6 +733,7 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
   const setMode = useThemeStore((s) => s.setMode)
   const setAccent = useThemeStore((s) => s.setAccent)
   const setLinks = useLinkStore((s) => s.setLinks)
+  const setProfile = useProfileStore((s) => s.setProfile)
 
   useEffect(() => {
     if (!isOnline) wasOfflineRef.current = true
@@ -572,11 +755,12 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
     let cancelled = false
     const load = async () => {
       try {
-        const [dirs, tasks, settings, links] = await Promise.all([
+        const [dirs, tasks, settings, links, profile] = await Promise.all([
           fetchDirectories(userId),
           fetchTasks(userId),
           fetchUserSettings(userId),
           fetchLinksForUser(userId),
+          fetchProfile(userId),
         ])
         if (!cancelled) {
           let dirsToSet = dirs
@@ -588,6 +772,7 @@ function AppShellWithRealtime({ userId }: { userId: string }) {
             setDirectories(dirsToSet)
             setTasks(tasks)
             setLinks(links)
+            setProfile(profile)
             if (settings) {
               setSettings(settings)
               setMode(settings.theme)
