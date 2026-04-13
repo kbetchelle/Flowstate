@@ -49,7 +49,7 @@ function validateUsername(username: string): string | null {
   return null
 }
 
-function LoginScreen() {
+function LoginScreen({ successMessage, onCreateAccount }: { successMessage?: string | null; onCreateAccount: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -86,22 +86,6 @@ function LoginScreen() {
     }
   }
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const err = validateUsername(username)
-    if (err) { setMessage(err); return }
-    setLoading(true)
-    setMessage(null)
-    const { error } = await supabase.auth.signUp({
-      email: usernameToEmail(username),
-      password,
-      options: { data: { username } },
-    })
-    setLoading(false)
-    if (error) setMessage(error.message)
-    else setMessage('Account created! You can now sign in.')
-  }
-
   const handleBiometric = async () => {
     setLoading(true)
     setMessage(null)
@@ -122,9 +106,13 @@ function LoginScreen() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 360, margin: '40px auto' }}>
+    <div style={glassCardStyle}>
       <h1 style={{ marginTop: 0 }}>Flowstate</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Sign in or create an account.</p>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 }}>Sign in to your account.</p>
+
+      {successMessage && (
+        <p style={{ color: 'var(--color-success)', fontSize: 14, marginBottom: 16 }}>{successMessage}</p>
+      )}
 
       {biometricReady && (
         <div style={{ marginBottom: 24 }}>
@@ -150,7 +138,7 @@ function LoginScreen() {
           onChange={(e) => setUsername(e.target.value)}
           required
           autoComplete="username"
-          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8, boxSizing: 'border-box' }}
+          style={{ ...inputStyle, marginBottom: 8 }}
         />
         <input
           type="password"
@@ -159,18 +147,283 @@ function LoginScreen() {
           onChange={(e) => setPassword(e.target.value)}
           required
           autoComplete="current-password"
-          style={{ display: 'block', width: '100%', marginBottom: 16, padding: 8, boxSizing: 'border-box' }}
+          style={{ ...inputStyle, marginBottom: 16 }}
         />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit" disabled={loading} style={{ padding: '8px 16px' }}>
-            Sign in
-          </button>
-          <button type="button" onClick={handleSignUp} disabled={loading} style={{ padding: '8px 16px' }}>
-            Sign up
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '10px 16px',
+            fontSize: 15,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            borderRadius: 'var(--radius-control)',
+          }}
+        >
+          {loading ? 'Signing in…' : 'Sign in'}
+        </button>
       </form>
       {message && <p style={{ marginTop: 16, color: 'var(--text-secondary)' }}>{message}</p>}
+
+      <p style={{ marginTop: 20, textAlign: 'center', marginBottom: 0 }}>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={onCreateAccount}
+          onKeyDown={(e) => e.key === 'Enter' && onCreateAccount()}
+          style={{ color: 'var(--accent)', cursor: 'pointer', fontSize: 14 }}
+        >
+          Create Account
+        </span>
+      </p>
+    </div>
+  )
+}
+
+function validatePassword(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters.'
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one capital letter.'
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number.'
+  return null
+}
+
+const glassCardStyle: React.CSSProperties = {
+  maxWidth: 400,
+  margin: '40px auto',
+  padding: 32,
+  background: 'var(--glass-bg)',
+  border: '1px solid var(--glass-border)',
+  borderRadius: 'var(--radius-panel)',
+  backdropFilter: 'blur(12px) saturate(180%)',
+  WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+  boxShadow: 'var(--glass-shadow), var(--glass-shadow-inset)',
+}
+
+const inputStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  padding: '8px 10px',
+  fontSize: 14,
+  border: '1px solid var(--input-border)',
+  borderRadius: 'var(--radius-control)',
+  boxSizing: 'border-box',
+  background: 'transparent',
+  color: 'var(--text)',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  color: 'var(--text-secondary)',
+  marginBottom: 4,
+}
+
+const fieldErrorStyle: React.CSSProperties = {
+  color: 'var(--color-error)',
+  fontSize: 12,
+  marginTop: 4,
+}
+
+function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void }) {
+  const [email, setEmail] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [generalError, setGeneralError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const newErrors: Record<string, string> = {}
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      newErrors.email = 'A valid email address is required.'
+    if (!firstName.trim()) newErrors.firstName = 'First name is required.'
+    if (!lastName.trim()) newErrors.lastName = 'Last name is required.'
+    if (!dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required.'
+    } else if (new Date(dateOfBirth) > new Date()) {
+      newErrors.dateOfBirth = 'Date of birth cannot be in the future.'
+    }
+
+    const usernameErr = validateUsername(username)
+    if (usernameErr) newErrors.username = usernameErr
+
+    const passwordErr = validatePassword(password)
+    if (passwordErr) newErrors.password = passwordErr
+
+    if (password !== confirmPassword)
+      newErrors.confirmPassword = 'Passwords do not match.'
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
+    setErrors({})
+    setGeneralError(null)
+    setLoading(true)
+
+    const { error } = await supabase.auth.signUp({
+      email: usernameToEmail(username),
+      password,
+      options: {
+        data: {
+          username,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          contact_email: email.trim(),
+          date_of_birth: dateOfBirth,
+        },
+      },
+    })
+
+    setLoading(false)
+    if (error) {
+      setGeneralError(error.message)
+    } else {
+      onSuccess()
+    }
+  }
+
+  return (
+    <div style={glassCardStyle}>
+      <h1 style={{ marginTop: 0, marginBottom: 4 }}>Create Account</h1>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 }}>
+        Fill in your details to get started.
+      </p>
+
+      {generalError && (
+        <p style={{ color: 'var(--color-error)', fontSize: 14, marginBottom: 16 }}>{generalError}</p>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Email</label>
+          <input
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={inputStyle}
+            autoComplete="email"
+          />
+          {errors.email && <p style={fieldErrorStyle}>{errors.email}</p>}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>First Name</label>
+            <input
+              type="text"
+              placeholder="First name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              style={inputStyle}
+              autoComplete="given-name"
+            />
+            {errors.firstName && <p style={fieldErrorStyle}>{errors.firstName}</p>}
+          </div>
+          <div>
+            <label style={labelStyle}>Last Name</label>
+            <input
+              type="text"
+              placeholder="Last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              style={inputStyle}
+              autoComplete="family-name"
+            />
+            {errors.lastName && <p style={fieldErrorStyle}>{errors.lastName}</p>}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Date of Birth</label>
+          <input
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            style={inputStyle}
+            autoComplete="bday"
+          />
+          {errors.dateOfBirth && <p style={fieldErrorStyle}>{errors.dateOfBirth}</p>}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Username</label>
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={inputStyle}
+            autoComplete="username"
+          />
+          {errors.username && <p style={fieldErrorStyle}>{errors.username}</p>}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Password</label>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={inputStyle}
+            autoComplete="new-password"
+          />
+          {errors.password && <p style={fieldErrorStyle}>{errors.password}</p>}
+          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, marginBottom: 0 }}>
+            At least 8 characters, one capital letter, and one number.
+          </p>
+        </div>
+
+        <div style={{ marginBottom: 24 }}>
+          <label style={labelStyle}>Confirm Password</label>
+          <input
+            type="password"
+            placeholder="Re-enter password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            style={inputStyle}
+            autoComplete="new-password"
+          />
+          {errors.confirmPassword && <p style={fieldErrorStyle}>{errors.confirmPassword}</p>}
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '10px 16px',
+            fontSize: 15,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            borderRadius: 'var(--radius-control)',
+          }}
+        >
+          {loading ? 'Creating account…' : 'Create Account'}
+        </button>
+      </form>
+
+      <p style={{ marginTop: 20, textAlign: 'center', marginBottom: 0 }}>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={onBack}
+          onKeyDown={(e) => e.key === 'Enter' && onBack()}
+          style={{ color: 'var(--accent)', cursor: 'pointer', fontSize: 14 }}
+        >
+          Back to sign in
+        </span>
+      </p>
     </div>
   )
 }
@@ -661,6 +914,8 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [offerBiometric, setOfferBiometric] = useState<{ username: string; refreshToken: string } | null>(null)
+  const [authView, setAuthView] = useState<'login' | 'create-account'>('login')
+  const [signupSuccessMessage, setSignupSuccessMessage] = useState<string | null>(null)
   const setAuthSession = useAuthStore((s) => s.setSession)
 
   useEffect(() => {
@@ -706,7 +961,26 @@ export default function App() {
   }
 
   if (!session) {
-    return <LoginScreen />
+    if (authView === 'create-account') {
+      return (
+        <CreateAccountScreen
+          onBack={() => setAuthView('login')}
+          onSuccess={() => {
+            setSignupSuccessMessage('Account created! Please sign in.')
+            setAuthView('login')
+          }}
+        />
+      )
+    }
+    return (
+      <LoginScreen
+        successMessage={signupSuccessMessage}
+        onCreateAccount={() => {
+          setSignupSuccessMessage(null)
+          setAuthView('create-account')
+        }}
+      />
+    )
   }
 
   return (
