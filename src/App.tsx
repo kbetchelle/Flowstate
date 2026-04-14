@@ -54,6 +54,7 @@ function LoginScreen({ successMessage, onCreateAccount }: { successMessage?: str
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const [biometricReady, setBiometricReady] = useState(false)
   const [biometricUsername, setBiometricUsername] = useState('')
 
@@ -69,19 +70,23 @@ function LoginScreen({ successMessage, onCreateAccount }: { successMessage?: str
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    const err = validateUsername(username)
-    if (err) { setMessage(err); return }
     setLoading(true)
     setMessage(null)
+    const signInEmail = username.includes('@') ? username.trim().toLowerCase() : usernameToEmail(username)
     const { error } = await supabase.auth.signInWithPassword({
-      email: usernameToEmail(username),
+      email: signInEmail,
       password,
     })
     setLoading(false)
     if (error) {
-      setMessage(error.message)
+      const msg = error.message.toLowerCase()
+      if (msg.includes('email not confirmed'))
+        setMessage('Please confirm your email address before signing in. Check your inbox.')
+      else if (msg.includes('rate') || msg.includes('limit'))
+        setMessage('Too many sign-in attempts. Please wait a moment and try again.')
+      else
+        setMessage('Incorrect username/email or password. Please try again.')
     } else if (isBiometricSupported() && !getBiometricData()) {
-      // Signal App to offer biometric setup after session is established
       sessionStorage.setItem('flowstate_offer_biometric', username)
     }
   }
@@ -133,22 +138,42 @@ function LoginScreen({ successMessage, onCreateAccount }: { successMessage?: str
       <form onSubmit={handleSignIn}>
         <input
           type="text"
-          placeholder="Username"
+          placeholder="Username or email"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
           autoComplete="username"
           style={{ ...inputStyle, marginBottom: 8 }}
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          autoComplete="current-password"
-          style={{ ...inputStyle, marginBottom: 16 }}
-        />
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            style={{ ...inputStyle, paddingRight: 40 }}
+          />
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowPassword(!showPassword)}
+            onKeyDown={(e) => e.key === 'Enter' && setShowPassword(!showPassword)}
+            style={{
+              position: 'absolute',
+              right: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              cursor: 'pointer',
+              fontSize: 13,
+              color: 'var(--text-tertiary)',
+              userSelect: 'none',
+            }}
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </span>
+        </div>
         <button
           type="submit"
           disabled={loading}
@@ -233,9 +258,15 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
+
+  const clearError = (field: string) => {
+    if (errors[field]) setErrors((prev) => { const next = { ...prev }; delete next[field]; return next })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -269,15 +300,23 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
     setGeneralError(null)
     setLoading(true)
 
+    const { data: taken } = await supabase.rpc('is_username_taken', { check_username: username })
+    if (taken) {
+      setErrors({ username: 'This username is already taken.' })
+      setLoading(false)
+      return
+    }
+
+    const normalizedEmail = email.trim().toLowerCase()
     const { error } = await supabase.auth.signUp({
-      email: usernameToEmail(username),
+      email: normalizedEmail,
       password,
       options: {
         data: {
           username,
           first_name: firstName.trim(),
           last_name: lastName.trim(),
-          contact_email: email.trim(),
+          contact_email: normalizedEmail,
           date_of_birth: dateOfBirth,
         },
       },
@@ -285,7 +324,17 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
 
     setLoading(false)
     if (error) {
-      setGeneralError(error.message)
+      const msg = error.message.toLowerCase()
+      if (msg.includes('already registered') || msg.includes('already been registered'))
+        setGeneralError('An account with this email already exists. Try signing in instead.')
+      else if (msg.includes('valid email') || msg.includes('invalid'))
+        setGeneralError('Please check your email address and try again.')
+      else if (msg.includes('password'))
+        setGeneralError('Password does not meet requirements. Use at least 8 characters with a capital letter and a number.')
+      else if (msg.includes('rate') || msg.includes('limit'))
+        setGeneralError('Too many attempts. Please wait a moment and try again.')
+      else
+        setGeneralError('Something went wrong creating your account. Please try again.')
     } else {
       onSuccess()
     }
@@ -309,7 +358,7 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
             type="email"
             placeholder="you@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEmail(e.target.value); clearError('email') }}
             style={inputStyle}
             autoComplete="email"
           />
@@ -323,7 +372,7 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
               type="text"
               placeholder="First name"
               value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
+              onChange={(e) => { setFirstName(e.target.value); clearError('firstName') }}
               style={inputStyle}
               autoComplete="given-name"
             />
@@ -335,7 +384,7 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
               type="text"
               placeholder="Last name"
               value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
+              onChange={(e) => { setLastName(e.target.value); clearError('lastName') }}
               style={inputStyle}
               autoComplete="family-name"
             />
@@ -348,7 +397,7 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
           <input
             type="date"
             value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
+            onChange={(e) => { setDateOfBirth(e.target.value); clearError('dateOfBirth') }}
             style={inputStyle}
             autoComplete="bday"
           />
@@ -361,7 +410,7 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
             type="text"
             placeholder="Username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => { setUsername(e.target.value); clearError('username') }}
             style={inputStyle}
             autoComplete="username"
           />
@@ -370,14 +419,34 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
 
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>Password</label>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={inputStyle}
-            autoComplete="new-password"
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); clearError('password') }}
+              style={{ ...inputStyle, paddingRight: 40 }}
+              autoComplete="new-password"
+            />
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowPassword(!showPassword)}
+              onKeyDown={(e) => e.key === 'Enter' && setShowPassword(!showPassword)}
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                cursor: 'pointer',
+                fontSize: 13,
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+              }}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </span>
+          </div>
           {errors.password && <p style={fieldErrorStyle}>{errors.password}</p>}
           <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, marginBottom: 0 }}>
             At least 8 characters, one capital letter, and one number.
@@ -386,14 +455,34 @@ function CreateAccountScreen({ onBack, onSuccess }: { onBack: () => void; onSucc
 
         <div style={{ marginBottom: 24 }}>
           <label style={labelStyle}>Confirm Password</label>
-          <input
-            type="password"
-            placeholder="Re-enter password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            style={inputStyle}
-            autoComplete="new-password"
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showConfirmPassword ? 'text' : 'password'}
+              placeholder="Re-enter password"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); clearError('confirmPassword') }}
+              style={{ ...inputStyle, paddingRight: 40 }}
+              autoComplete="new-password"
+            />
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              onKeyDown={(e) => e.key === 'Enter' && setShowConfirmPassword(!showConfirmPassword)}
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                cursor: 'pointer',
+                fontSize: 13,
+                color: 'var(--text-tertiary)',
+                userSelect: 'none',
+              }}
+            >
+              {showConfirmPassword ? 'Hide' : 'Show'}
+            </span>
+          </div>
           {errors.confirmPassword && <p style={fieldErrorStyle}>{errors.confirmPassword}</p>}
         </div>
 
@@ -966,7 +1055,7 @@ export default function App() {
         <CreateAccountScreen
           onBack={() => setAuthView('login')}
           onSuccess={() => {
-            setSignupSuccessMessage('Account created! Please sign in.')
+            setSignupSuccessMessage('Account created! Check your email to confirm your account, then sign in.')
             setAuthView('login')
           }}
         />
